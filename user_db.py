@@ -2,6 +2,10 @@ import sqlite3
 import bcrypt
 import os
 from config import USER_DB
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "expertease.db")
 
 
 class UserDB:
@@ -80,3 +84,14 @@ class UserDB:
             "email": row[0],
             "is_verified": bool(row[1])
         }
+
+    def get_user_by_username(self, username):
+        """Get user ID by username for JWT authentication"""
+        self.cursor.execute(
+            "SELECT id FROM users WHERE username=?",
+            (username,)
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        return row[0]  # Return user_id
