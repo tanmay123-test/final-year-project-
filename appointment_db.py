@@ -36,7 +36,7 @@ class AppointmentDB:
             'id', 'user_id', 'worker_id', 'user_name', 'patient_symptoms',
             'booking_date', 'time_slot', 'appointment_type', 'status',
             'meeting_link', 'doctor_otp', 'otp_verified', 'created_at',
-            'video_room', 'video_status', 'prescription_file'
+            'video_room', 'video_status', 'prescription_file', 'insurance_details'
         }
         
         # Add missing columns
@@ -64,7 +64,8 @@ class AppointmentDB:
                 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
                 'video_room': 'TEXT',
                 'video_status': 'TEXT DEFAULT "ready"',
-                'prescription_file': 'TEXT'
+                'prescription_file': 'TEXT',
+                'insurance_details': 'TEXT'
             }
             
             try:
@@ -132,7 +133,7 @@ class AppointmentDB:
     # =========================================================
     # VIDEO REQUEST (USER SIDE)
     # =========================================================
-    def book_video(self, user_id, worker_id, user_name, symptoms):
+    def book_video(self, user_id, worker_id, user_name, symptoms, insurance_details=None):
         from datetime import datetime, timedelta
         import random
         import string
@@ -151,9 +152,9 @@ class AppointmentDB:
         cursor.execute("""
         INSERT INTO appointments
         (user_id, worker_id, user_name, patient_symptoms,
-         booking_date, time_slot, appointment_type, status, video_room, video_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, worker_id, user_name, symptoms, today, default_time, 'video', 'pending', video_room, 'ready'))
+         booking_date, time_slot, appointment_type, status, video_room, video_status, insurance_details)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, worker_id, user_name, symptoms, today, default_time, 'video', 'pending', video_room, 'ready', insurance_details))
 
         conn.commit()
         apt_id = cursor.lastrowid
@@ -169,7 +170,7 @@ class AppointmentDB:
     # =========================================================
     # CLINIC BOOKING (ENHANCED)
     # =========================================================
-    def book_clinic(self, user_id, worker_id, user_name, symptoms, date, time_slot):
+    def book_clinic(self, user_id, worker_id, user_name, symptoms, date, time_slot, insurance_details=None):
         """
         Book clinic appointment with enhanced slot matching and logging
         Returns (success, result) where result is appointment_id or error message
@@ -196,43 +197,48 @@ class AppointmentDB:
             if available_slot == time_slot:
                 slot_found = True
                 break
-
+        
         if not slot_found:
-            print(f"❌ Slot '{time_slot}' not found in available slots")
+            print(f"❌ Slot '{time_slot}' not found or already booked")
             return False, "Selected time slot is not available"
 
-        # Remove the availability
-        try:
-            self.availability_db.remove_availability(worker_id, date, time_slot)
-            print(f"✅ Removed availability for slot '{time_slot}'")
-        except Exception as e:
-            print(f"❌ Error removing availability: {e}")
-            return False, "Failed to reserve time slot"
-
-        # Book the appointment
         conn = self.get_conn()
         cursor = conn.cursor()
 
         try:
+            # Check for double booking
+            cursor.execute("""
+            SELECT id FROM appointments 
+            WHERE worker_id = ? AND booking_date = ? AND time_slot = ? AND status != 'cancelled'
+            """, (worker_id, date, time_slot))
+            
+            if cursor.fetchone():
+                conn.close()
+                print(f"❌ Double booking detected for {date} at {time_slot}")
+                return False, "This slot has just been booked by another patient"
+
+            # Book appointment
             cursor.execute("""
             INSERT INTO appointments
             (user_id, worker_id, user_name, patient_symptoms,
-             booking_date, time_slot, appointment_type, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'clinic', 'pending')
-            """, (user_id, worker_id, user_name, symptoms, date, time_slot))
-
-            conn.commit()
-            apt_id = cursor.lastrowid
-            print(f"✅ Clinic appointment booked successfully with ID: {apt_id}")
+             booking_date, time_slot, appointment_type, status, insurance_details)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, worker_id, user_name, symptoms, date, time_slot, 'clinic', 'pending', insurance_details))
             
+            apt_id = cursor.lastrowid
+            
+            # Remove availability
+            self.availability_db.remove_availability(worker_id, date, time_slot)
+            
+            conn.commit()
+            conn.close()
+            print(f"✅ Clinic appointment booked with ID: {apt_id}")
             return True, apt_id
             
         except Exception as e:
-            conn.rollback()
-            print(f"❌ Database error during booking: {e}")
-            return False, "Database error during booking"
-        finally:
+            print(f"❌ Database error: {e}")
             conn.close()
+            return False, f"Database error: {str(e)}"
 
     # =========================================================
     # FETCH REQUESTS FOR DOCTOR

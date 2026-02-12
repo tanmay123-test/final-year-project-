@@ -13,8 +13,13 @@ import WorkerSignup from './pages/WorkerSignup';
 import WorkerDashboard from './pages/WorkerDashboard';
 import ServiceSelection from './pages/ServiceSelection';
 import DoctorLogin from './pages/DoctorLogin';
+import DoctorDashboard from './pages/DoctorDashboard';
+import DoctorAvailability from './pages/DoctorAvailability';
+import DoctorProfile from './pages/DoctorProfile';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+
+import UserLayout from './components/UserLayout';
 
 const ProtectedWorkerRoute = ({ children }) => {
   const { worker, loading } = useAuth();
@@ -37,39 +42,17 @@ const App = () => {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route 
-            path="/dashboard"  
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/doctors" 
-            element={
-              <ProtectedRoute>
-                <DoctorSearch />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/book/:doctorId" 
-            element={
-              <ProtectedRoute>
-                <Booking />
-              </ProtectedRoute>
-            } 
-          />
           
-          <Route 
-            path="/services" 
-            element={
-              <ProtectedRoute>
-                <ServiceSelection />
-              </ProtectedRoute>
-            } 
-          />
+          {/* Authenticated User Layout */}
+          <Route element={<ProtectedRoute><UserLayout /></ProtectedRoute>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/doctors" element={<DoctorSearch />} />
+            <Route path="/book/:doctorId" element={<Booking />} />
+            <Route path="/profile" element={<div style={{padding: '2rem'}}><h2>Profile Page</h2><p>Coming Soon</p></div>} />
+          </Route>
+
+          {/* Service Selection (No Bottom Nav) */}
+          <Route path="/services" element={<ProtectedRoute><ServiceSelection /></ProtectedRoute>} />
 
           {/* Worker Routes - Service Specific */}
           <Route path="/provide-service" element={<ServiceSelection mode="worker" />} />
@@ -77,6 +60,30 @@ const App = () => {
           {/* Healthcare */}
           <Route path="/worker/healthcare/login" element={<DoctorLogin />} />
           <Route path="/worker/healthcare/signup" element={<WorkerSignup serviceType="healthcare" />} />
+          <Route 
+            path="/doctor/dashboard" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorDashboard />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/availability" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorAvailability />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/profile" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorProfile />
+              </ProtectedWorkerRoute>
+            } 
+          />
           
           {/* Housekeeping */}
           <Route path="/worker/housekeeping/login" element={<WorkerLogin serviceType="housekeeping" />} />
