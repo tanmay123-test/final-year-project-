@@ -251,6 +251,9 @@ def book_clinic():
         print(f"❌ Missing required fields: {missing_fields}")
         return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
 
+    # Optional insurance
+    insurance_details = d.get("insurance_details")
+
     can_book, message = subscription_db.check_appointment_limit(d["worker_id"])
     if not can_book:
         print(f"❌ Subscription limit exceeded: {message}")
@@ -262,7 +265,8 @@ def book_clinic():
         d["user_name"],
         d["symptoms"],
         d["date"],
-        d["time_slot"]
+        d["time_slot"],
+        insurance_details
     )
 
     if not ok:
@@ -297,11 +301,22 @@ def video_request():
     
     print(f"🎥 Video consultation request: {d}")
 
+    # Validate required fields
+    required_fields = ["user_id", "worker_id", "user_name", "symptoms"]
+    missing_fields = [field for field in required_fields if field not in d]
+    if missing_fields:
+        print(f"❌ Missing required fields: {missing_fields}")
+        return jsonify({"error": f"Missing required fields: {', '.join(missing_fields)}"}), 400
+
+    # Optional insurance
+    insurance_details = d.get("insurance_details")
+
     apt_id = appt_db.book_video(
         d["user_id"],
         d["worker_id"],
         d["user_name"],
-        d["symptoms"]
+        d["symptoms"],
+        insurance_details
     )
 
     print(f"✅ Video consultation booked with ID: {apt_id}")
@@ -380,6 +395,17 @@ def worker_login():
         "service": svc,
         "specialization": spec
     }), 200
+
+
+@app.route("/worker/<int:worker_id>", methods=["GET"])
+def get_worker_details(worker_id):
+    worker = worker_db.get_worker_by_id(worker_id)
+    if not worker:
+        return jsonify({"error": "Worker not found"}), 404
+    
+    # Remove sensitive info
+    worker.pop("password", None)
+    return jsonify({"worker": worker}), 200
 
 
 @app.route("/worker/<int:worker_id>/requests", methods=["GET"])

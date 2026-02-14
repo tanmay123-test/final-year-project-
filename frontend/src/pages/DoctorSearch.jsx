@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { doctorService } from '../services/api';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Search, Bell, Stethoscope, Heart, 
-  Activity, Baby, Bone, Star, MapPin, 
-  Home, Bot, Compass, Calendar, User 
+  Activity, Baby, Bone, Star, MapPin
 } from 'lucide-react';
 
 const DoctorSearch = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const specializationParam = searchParams.get('spec');
+
   const [doctors, setDoctors] = useState([]);
   const [specializations, setSpecializations] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,23 +21,44 @@ const DoctorSearch = () => {
   // Icon mapping for specializations
   const specIcons = {
     'General': Stethoscope,
+    'General Physician': Stethoscope,
     'Cardiology': Heart,
+    'Cardiologist': Heart,
+    'HEART': Heart,
     'Dermatology': Activity,
+    'Dermatologist': Activity,
     'Pediatrics': Baby,
+    'Pediatrician': Baby,
     'Orthopedics': Bone,
+    'Orthopedic': Bone,
+    'Dentist': Stethoscope,
+    'Eye Specialist': Stethoscope,
+    'ENT': Stethoscope,
+    'Neurologist': Activity,
+    'Psychiatrist': Activity,
+    'Gynecologist': Activity,
+    'Urologist': Activity,
+    'Oncologist': Activity,
     // Fallback
     'default': Stethoscope
   };
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const [docsRes, specsRes] = await Promise.all([
-          doctorService.getAllDoctors(),
-          doctorService.getSpecializations()
-        ]);
-        setDoctors(docsRes.data.doctors);
+        // Fetch specializations
+        const specsRes = await doctorService.getSpecializations();
         setSpecializations(specsRes.data.specializations);
+
+        // Fetch doctors based on URL param or get all
+        let docsRes;
+        if (specializationParam) {
+          docsRes = await doctorService.getDoctorsBySpecialization(specializationParam);
+        } else {
+          docsRes = await doctorService.getAllDoctors();
+        }
+        setDoctors(docsRes.data.doctors);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -43,7 +66,7 @@ const DoctorSearch = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [specializationParam]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -62,32 +85,6 @@ const DoctorSearch = () => {
     const Icon = specIcons[specName] || specIcons['default'];
     return <Icon size={24} />;
   };
-
-  // Bottom Navigation Component (Mobile Only)
-  const BottomNav = () => (
-    <div className="bottom-nav">
-      <Link to="/services" className="nav-item active">
-        <Home size={24} />
-        <span>Home</span>
-      </Link>
-      <Link to="#" className="nav-item">
-        <Bot size={24} />
-        <span>AI Care</span>
-      </Link>
-      <Link to="/doctors" className="nav-item">
-        <Compass size={24} />
-        <span>Explore</span>
-      </Link>
-      <Link to="/dashboard" className="nav-item">
-        <Calendar size={24} />
-        <span>Appointments</span>
-      </Link>
-      <Link to="/profile" className="nav-item">
-        <User size={24} />
-        <span>Profile</span>
-      </Link>
-    </div>
-  );
 
   return (
     <div className="healthcare-dashboard">
@@ -192,13 +189,11 @@ const DoctorSearch = () => {
       </div>
       
       {/* Mobile Bottom Navigation */}
-      <BottomNav />
-
+      
       <style>{`
         .healthcare-dashboard {
           background-color: var(--background-light);
           min-height: 100vh;
-          padding-bottom: 80px; /* Space for bottom nav */
         }
 
         /* Header Styles */
@@ -474,42 +469,10 @@ const DoctorSearch = () => {
           opacity: 0.9;
         }
 
-        /* Bottom Navigation */
-        .bottom-nav {
-          position: fixed;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          background: white;
-          display: flex;
-          justify-content: space-around;
-          padding: 1rem 0.5rem;
-          box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
-          z-index: 100;
-          border-top-left-radius: 20px;
-          border-top-right-radius: 20px;
-        }
-
-        .nav-item {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-decoration: none;
-          color: #95A5A6;
-          font-size: 0.75rem;
-          gap: 0.25rem;
-        }
-
-        .nav-item.active {
-          color: var(--accent-blue); /* Replaced Purple */
-        }
+        /* Bottom Navigation styles removed - moved to BottomNav.css */
         
         /* Responsive Adjustments */
         @media (min-width: 768px) {
-          .bottom-nav {
-            display: none; /* Hide bottom nav on desktop, assume existing Navbar is used */
-          }
-          
           .healthcare-dashboard {
              padding-bottom: 2rem;
           }

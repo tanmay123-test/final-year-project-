@@ -90,6 +90,8 @@ export const doctorService = {
   getSpecializations: () => api.get('/healthcare/specializations'),
   getDoctorsBySpecialization: (spec) => api.get(`/healthcare/doctors/${spec}`),
   searchDoctors: (query) => api.get(`/healthcare/search?q=${query}`),
+  getDoctorById: (id) => api.get(`/worker/${id}`),
+  getAvailability: (id, date) => api.get(`/worker/${id}/availability?date=${date}`),
 };
 
 export const appointmentService = {

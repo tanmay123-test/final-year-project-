@@ -16,7 +16,7 @@ const DoctorLogin = () => {
     setLoading(true);
     try {
       await workerLogin(email);
-      navigate('/worker/dashboard');
+      navigate('/doctor/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to login. Please check your email.');
     } finally {

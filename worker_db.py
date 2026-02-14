@@ -94,9 +94,15 @@ class WorkerDB:
             return None
         return (row["id"], row["status"], row["service"], row["specialization"] or "")
 
+    def get_worker_by_id(self, worker_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM workers WHERE id = ?", (worker_id,))
+        row = cursor.fetchone()
+        return self._row_to_dict(row)
+
     def get_all_specializations(self):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT DISTINCT specialization FROM workers WHERE specialization IS NOT NULL AND specialization != ''")
+        cursor.execute("SELECT DISTINCT specialization FROM workers WHERE status = 'approved' AND specialization IS NOT NULL AND specialization != ''")
         return [r["specialization"] for r in cursor.fetchall()]
 
     def get_all_workers(self):
