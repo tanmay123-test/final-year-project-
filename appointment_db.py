@@ -36,7 +36,9 @@ class AppointmentDB:
             'id', 'user_id', 'worker_id', 'user_name', 'patient_symptoms',
             'booking_date', 'time_slot', 'appointment_type', 'status',
             'meeting_link', 'doctor_otp', 'otp_verified', 'created_at',
-            'video_room', 'video_status', 'prescription_file'
+            'video_room', 'video_status', 'prescription_file',
+            'payment_status', 'payment_amount', 'razorpay_order_id', 
+            'razorpay_payment_id', 'payout_status'
         }
         
         # Add missing columns
@@ -64,7 +66,12 @@ class AppointmentDB:
                 'created_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
                 'video_room': 'TEXT',
                 'video_status': 'TEXT DEFAULT "ready"',
-                'prescription_file': 'TEXT'
+                'prescription_file': 'TEXT',
+                'payment_status': 'TEXT DEFAULT "pending"',
+                'payment_amount': 'INTEGER',
+                'razorpay_order_id': 'TEXT',
+                'razorpay_payment_id': 'TEXT',
+                'payout_status': 'TEXT DEFAULT "pending"'
             }
             
             try:
@@ -108,6 +115,13 @@ class AppointmentDB:
             video_room TEXT,
             video_status TEXT DEFAULT 'ready',
             prescription_file TEXT,
+            
+            -- Payment fields
+            payment_status TEXT DEFAULT 'pending',
+            payment_amount INTEGER,
+            razorpay_order_id TEXT,
+            razorpay_payment_id TEXT,
+            payout_status TEXT DEFAULT 'pending',
 
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -268,6 +282,28 @@ class AppointmentDB:
         WHERE worker_id=?
         ORDER BY created_at DESC
         """, (worker_id,))
+
+        rows = cursor.fetchall()
+        keys = [d[0] for d in cursor.description]
+        conn.close()
+
+        return [dict(zip(keys, r)) for r in rows]
+
+    # =========================================================
+    # GET APPOINTMENTS BY USER
+    # =========================================================
+    def get_by_user(self, user_id):
+        """
+        Get all appointments for a specific user
+        """
+        conn = self.get_conn()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT * FROM appointments
+        WHERE user_id=?
+        ORDER BY created_at DESC
+        """, (user_id,))
 
         rows = cursor.fetchall()
         keys = [d[0] for d in cursor.description]

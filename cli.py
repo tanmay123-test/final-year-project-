@@ -1,6 +1,7 @@
 import requests
 import sys
 import random
+import time
 
 API = "http://127.0.0.1:5000"
 TOKEN = None
@@ -135,8 +136,9 @@ def healthcare_navigation():
         print("2. 🤖 AI Care")
         print("3. 🔍 Explore")
         print("4. 📅 Appointments")
-        print("5. 👤 Profile")
-        print("6. ⬅️  Back to Services")
+        print("5. 🎥 Video Consultation")
+        print("6. 👤 Profile")
+        print("7. ⬅️  Back to Services")
         
         choice = input("\nSelect tab: ").strip()
         
@@ -149,8 +151,10 @@ def healthcare_navigation():
         elif choice == "4":
             healthcare_appointments_tab()
         elif choice == "5":
-            healthcare_profile_tab()
+            video_menu_user(USER_ID)
         elif choice == "6":
+            healthcare_profile_tab()
+        elif choice == "7":
             return
         else:
             print("❌ Invalid choice")
@@ -774,6 +778,8 @@ def healthcare_appointments_tab():
                 "pending": "⏳",
                 "accepted": "✅",
                 "rejected": "❌",
+                "payment_pending": "💰",
+                "confirmed": "✅",
                 "in_consultation": "💬",
                 "completed": "✓",
                 "cancelled": "🚫"
@@ -781,18 +787,30 @@ def healthcare_appointments_tab():
             apt_type = apt.get("appointment_type", "clinic")
             type_label = "VIDEO" if apt_type == "video" else "CLINIC"
             
-            print(f"\n[{idx}] {status_icon} {apt['status'].upper()} ({type_label})")
+            # Show payment status if available
+            payment_info = ""
+            if apt.get('payment_status'):
+                payment_status = apt['payment_status'].upper()
+                if payment_status == 'PENDING':
+                    payment_info = f" 💳 PAYMENT PENDING"
+                elif payment_status == 'PAID':
+                    payment_info = f" ✅ PAID"
+            
+            print(f"\n[{idx}] {status_icon} {apt['status'].upper()} ({type_label}){payment_info}")
             print(f"    Appointment ID: {apt['id']}")
             print(f"    Doctor ID: {apt['worker_id']}")
             print(f"    Symptoms: {apt['patient_symptoms']}")
             print(f"    Date: {apt['booking_date']}")
+            if apt.get('payment_status'):
+                print(f"    💰 Payment Status: {apt['payment_status'].upper()}")
             print("-" * 60)
         
         print(f"\n{len(appointments) + 1}. View Appointment Details")
         print(f"{len(appointments) + 2}. Cancel Appointment")
         print(f"{len(appointments) + 3}. 🔐 Join Video Call (Enter OTP)")
         print(f"{len(appointments) + 4}. View Messages")
-        print(f"{len(appointments) + 5}. ⬅️  Back")
+        print(f"{len(appointments) + 5}. 💳 Make Payment")
+        print(f"{len(appointments) + 6}. ⬅️ Back")
         
         choice = input("\nSelect option: ").strip()
         
@@ -818,6 +836,11 @@ def healthcare_appointments_tab():
                 if apt_id:
                     view_messages_user(apt_id)
             elif choice_num == len(appointments) + 5:
+                # Quick payment option
+                apt_id = input("Enter Appointment ID for payment: ").strip()
+                if apt_id:
+                    make_payment_for_appointment(apt_id)
+            elif choice_num == len(appointments) + 6:
                 return
             else:
                 print("❌ Invalid choice")
@@ -972,14 +995,132 @@ def view_appointment_detail_user(appointment_id=None):
         print("="*60)
         print(f"ID: {apt['id']}")
         print(f"Status: {apt['status']}")
+        
+        # Show payment status if available
+        if apt.get('payment_status'):
+            payment_status = apt['payment_status'].upper()
+            if payment_status == 'PENDING':
+                print(f"💰 Payment Status: {payment_status} - PAYMENT REQUIRED")
+            elif payment_status == 'PAID':
+                print(f"💰 Payment Status: {payment_status} - ✅ PAID")
+            else:
+                print(f"💰 Payment Status: {payment_status}")
+        
         print(f"Doctor ID: {apt['worker_id']}")
         print(f"Patient: {apt['user_name']}")
         print(f"Symptoms: {apt['patient_symptoms']}")
         print(f"Booking Date: {apt['booking_date']}")
         print(f"Created: {apt['created_at']}")
+        
+        # Show payment options if payment is pending
+        if apt.get('payment_status') == 'pending' and apt.get('status') in ['accepted', 'payment_pending']:
+            print("\n" + "="*60)
+            print("💳 PAYMENT OPTIONS")
+            print("="*60)
+            print("1. 💳 Make Payment")
+            print("2. 📋 View Payment Details")
+            print("3. ⬅️ Back")
+            
+            choice = input("\nSelect option: ").strip()
+            
+            if choice == "1":
+                make_payment_for_appointment(apt['id'])
+            elif choice == "2":
+                view_payment_details(apt['id'])
+        
         print("="*60)
     else:
         print("❌ Error:", r.json().get("error", "Failed to fetch appointment"))
+    
+    input("\nPress Enter to continue...")
+
+
+def make_payment_for_appointment(appointment_id):
+    """Process payment for an appointment"""
+    print("\n💳 INITIATING PAYMENT")
+    print("="*60)
+    
+    try:
+        # Create payment order
+        r = requests.post(f"{API}/api/payment/create-order", 
+                        json={"appointment_id": appointment_id},
+                        headers={"Authorization": f"Bearer {TOKEN}"})
+        
+        if r.status_code == 200:
+            data = r.json()
+            print(f"✅ Payment order created!")
+            print(f"📋 Order ID: {data['order_id']}")
+            print(f"💰 Amount: ₹{data['amount']}")
+            
+            if data.get('pricing_breakdown'):
+                breakdown = data['pricing_breakdown']
+                print(f"\n📊 PRICE BREAKDOWN:")
+                print(f"   Doctor Fee: ₹{breakdown['doctor_fee']}")
+                print(f"   Platform Fee: ₹{breakdown['platform_fee']}")
+                print(f"   Total Amount: ₹{breakdown['total_amount']}")
+            
+            print(f"\n🌐 Opening payment gateway...")
+            print(f"📱 Please complete payment in browser")
+            print(f"🔗 Payment URL: https://razorpay.com/pay/{data['order_id']}")
+            
+            # Simulate payment completion (in real app, this would be handled by webhook)
+            confirm = input(f"\n✅ Payment completed? (y/n): ").strip().lower()
+            if confirm in ['y', 'yes', 'Y', 'YES']:
+                # For testing, simulate payment confirmation
+                payment_id = f"pay_test_{appointment_id}_{int(time.time())}"
+                
+                r_confirm = requests.post(f"{API}/api/payment/confirm",
+                                     json={
+                                         "appointment_id": appointment_id,
+                                         "razorpay_payment_id": payment_id
+                                     },
+                                     headers={"Authorization": f"Bearer {TOKEN}"})
+                
+                if r_confirm.status_code == 200:
+                    print("✅ Payment confirmed successfully!")
+                    print("📅 Appointment confirmed!")
+                    
+                    if r_confirm.json().get('video_details'):
+                        video = r_confirm.json()['video_details']
+                        print(f"\n🎥 VIDEO CONSULTATION DETAILS:")
+                        print(f"🔗 Patient URL: {video['patient_url']}")
+                        print(f"🔐 OTP: {video['otp']}")
+                else:
+                    print("❌ Payment confirmation failed")
+            else:
+                print("❌ Payment cancelled")
+        else:
+            print("❌ Failed to create payment order")
+            print("Error:", r.json().get("error", "Unknown error"))
+            
+    except Exception as e:
+        print(f"❌ Payment error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def view_payment_details(appointment_id):
+    """View payment details for an appointment"""
+    print("\n📋 PAYMENT DETAILS")
+    print("="*60)
+    
+    try:
+        r = requests.get(f"{API}/api/payment/status/{appointment_id}",
+                       headers={"Authorization": f"Bearer {TOKEN}"})
+        
+        if r.status_code == 200:
+            data = r.json()
+            print(f"Appointment ID: {appointment_id}")
+            print(f"Payment Status: {data.get('payment_status', 'Unknown')}")
+            print(f"Payment Amount: ₹{data.get('payment_amount', 'N/A')}")
+            print(f"Razorpay Order ID: {data.get('razorpay_order_id', 'N/A')}")
+            print(f"Razorpay Payment ID: {data.get('razorpay_payment_id', 'N/A')}")
+            print(f"Payout Status: {data.get('payout_status', 'N/A')}")
+        else:
+            print("❌ Failed to fetch payment details")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
     
     input("\nPress Enter to continue...")
 
@@ -1211,9 +1352,10 @@ def worker_menu(worker_id):
         print("1. 📊 Dashboard")
         print("2. 📅 Availability")
         print("3.  Consultations")
-        print("4. 👤 Profile")
-        print("5. 💳 Subscription")
-        print("6. 🚪 Logout")
+        print("4. 🎥 Video Consultation")
+        print("5. 👤 Profile")
+        print("6. 💳 Subscription")
+        print("7. 🚪 Logout")
 
         c = input("\nSelect tab: ").strip()
 
@@ -1227,14 +1369,17 @@ def worker_menu(worker_id):
             doctor_consultations_tab(worker_id)
 
         elif c == "4":
+            video_menu_doctor(worker_id)
+
+        elif c == "5":
             should_logout = doctor_profile_tab(worker_id)
             if should_logout:
                 return
 
-        elif c == "5":
+        elif c == "6":
             doctor_subscription_menu(worker_id)
 
-        elif c == "6":
+        elif c == "7":
             print("👋 Logged out")
             return
 
@@ -1333,9 +1478,23 @@ def doctor_pending_requests(worker_id):
                 })
                 
                 if r.status_code == 200:
+                    data = r.json()
                     print("✅ Request accepted successfully!")
-                    if selected_request.get('appointment_type') == 'video':
-                        data = r.json()
+                    
+                    # Handle new payment flow
+                    if data.get('payment_required'):
+                        print(f"\n💰 PAYMENT REQUIRED")
+                        print(f"📋 Consultation Fee: ₹{data.get('doctor_fee', 'N/A')}")
+                        print(f"💳 Patient needs to pay before consultation")
+                        print(f"📱 Patient will receive payment prompt")
+                        
+                        if selected_request.get('appointment_type') == 'video':
+                            print(f"\n🎥 Video consultation details will be sent after payment")
+                        else:
+                            print(f"\n🏥 Clinic appointment confirmed after payment")
+                    
+                    # Handle old flow for backward compatibility or video details after payment
+                    elif selected_request.get('appointment_type') == 'video':
                         if data.get('success') and data.get('otp'):
                             print(f"\n🎥 VIDEO CONSULTATION DETAILS:")
                             print(f"🔐 Doctor OTP: {data.get('otp')}")
@@ -1347,10 +1506,14 @@ def doctor_pending_requests(worker_id):
                             print(f"🔗 Meeting Link: {data['meeting_link']}")
                         if data.get('otp_sent'):
                             print("📧 OTP sent to your email")
+                    else:
+                        print(f"\n📅 Appointment accepted successfully!")
+                        
                 else:
                     print("❌ Failed to accept request")
                     if r.status_code != 500:
-                        print("Server says:", r.json().get("error", "Unknown error"))
+                        error_data = r.json()
+                        print("Server says:", error_data.get("error", "Unknown error"))
                         
             except Exception as e:
                 print(f"❌ Network error: {e}")
@@ -1629,22 +1792,22 @@ def doctor_subscription_menu(worker_id):
         print("="*60)
         
         # Get current subscription
-        r = requests.get(f"{API}/subscription/current/{worker_id}")
+        r = requests.get(f"{API}/api/subscription/current?worker_id={worker_id}")
         if r.status_code == 200:
             data = r.json()
             subscription = data.get("subscription")
             
             if subscription:
                 print(f"\n📋 Current Plan: {subscription['plan_name']}")
-                print(f"📅 End Date: {subscription['end_date'][:10]}")
-                print(f"📝 Features: {subscription['features']}")
+                print(f"📅 End Date: {subscription['end_date'][:10] if subscription['end_date'] else 'N/A'}")
+                print(f"📝 Features: Basic appointment scheduling, Profile management")
                 
                 # Get stats
-                r_stats = requests.get(f"{API}/subscription/stats/{worker_id}")
+                r_stats = requests.get(f"{API}/api/subscription/stats/{worker_id}")
                 if r_stats.status_code == 200:
                     stats = r_stats.json().get("stats")
                     if stats:
-                        print(f"📊 Today's Usage: {stats['today_usage']}/{stats['max_appointments']}")
+                        print(f"📊 Today's Usage: {stats['today_usage']}/{stats['daily_limit']}")
                         print(f"🔄 Remaining Today: {stats['remaining_today']}")
             else:
                 print("\n❌ No active subscription")
@@ -1675,9 +1838,10 @@ def doctor_subscription_menu(worker_id):
 
 def view_subscription_plans():
     """View available subscription plans"""
-    r = requests.get(f"{API}/subscription/plans")
+    r = requests.get(f"{API}/api/subscription/plans")
     if r.status_code == 200:
-        plans = r.json().get("plans", [])
+        data = r.json()
+        plans = data.get("plans", [])
         
         print("\n" + "="*60)
         print("📋 AVAILABLE SUBSCRIPTION PLANS")
@@ -1685,10 +1849,9 @@ def view_subscription_plans():
         
         for i, plan in enumerate(plans, 1):
             print(f"\n[{i}] {plan['name']} Plan")
-            print(f"💰 Price: ${plan['price']}/month")
+            print(f"💰 Price: ₹{plan['price']}/month")
             print(f"📅 Duration: {plan['duration_days']} days")
-            print(f"📝 Features: {plan['features']}")
-            print(f"📊 Max Appointments/Day: {plan['max_appointments']}")
+            print(f"📊 Max Appointments/Day: {plan['daily_appointment_limit']}")
             print("-" * 40)
     else:
         print("❌ Error fetching plans")
@@ -1698,12 +1861,13 @@ def view_subscription_plans():
 def subscribe_to_plan(worker_id):
     """Subscribe to a plan"""
     # Show available plans
-    r = requests.get(f"{API}/subscription/plans")
+    r = requests.get(f"{API}/api/subscription/plans")
     if r.status_code != 200:
         print("❌ Error fetching plans")
         return
     
-    plans = r.json().get("plans", [])
+    data = r.json()
+    plans = data.get("plans", [])
     if not plans:
         print("❌ No plans available")
         return
@@ -1713,8 +1877,7 @@ def subscribe_to_plan(worker_id):
     print("="*60)
     
     for i, plan in enumerate(plans, 1):
-        print(f"[{i}] {plan['name']} - ${plan['price']}/month")
-        print(f"    {plan['features']}")
+        print(f"[{i}] {plan['name']} - ₹{plan['price']}/month ({plan['daily_appointment_limit']}/day)")
     
     try:
         choice = int(input("\nSelect plan number: "))
@@ -1725,6 +1888,8 @@ def subscribe_to_plan(worker_id):
         selected_plan = plans[choice - 1]
         
         print(f"\n📋 Selected: {selected_plan['name']} Plan")
+        print(f"💰 Price: ₹{selected_plan['price']}/month")
+        print(f"📊 Limit: {selected_plan['daily_appointment_limit']} appointments/day")
         print(f"💰 Price: ${selected_plan['price']}/month")
         
         if selected_plan['price'] > 0:
@@ -1736,20 +1901,127 @@ def subscribe_to_plan(worker_id):
         
         confirm = input(f"\nConfirm subscription to {selected_plan['name']}? (y/n): ").lower()
         if confirm == 'y':
-            # Create subscription
-            r = requests.post(f"{API}/subscription/subscribe", json={
+            # Create subscription order first
+            r_order = requests.post(f"{API}/api/subscription/create-order", json={
                 "worker_id": worker_id,
-                "plan_id": selected_plan['id'],
-                "payment_id": payment_id
+                "plan_id": selected_plan['id']
             })
             
-            if r.status_code == 201:
-                print("✅ Subscription created successfully!")
-                print(f"📋 Plan: {selected_plan['name']}")
-                print(f"💳 Payment ID: {payment_id}")
+            if r_order.status_code == 201:
+                order_data = r_order.json()
+                order = order_data.get("order", {})
+                
+                print(f"\n💳 Payment order created!")
+                print(f"📋 Order ID: {order.get('order_id')}")
+                print(f"💰 Amount: ₹{order.get('amount')}")
+                
+                # Simulate payment confirmation
+                if selected_plan['price'] > 0:
+                    print(f"\n💳 INITIATING PAYMENT")
+                    print("="*60)
+                    print(f"📋 Order ID: {order.get('order_id')}")
+                    print(f"💰 Amount: ₹{order.get('amount')}")
+                    print(f"🔑 Razorpay Key: {order.get('key')}")
+                    
+                    # Use your existing payment system
+                    payment_url = f"{API}/create-order"
+                    
+                    print(f"\n🌐 Using your payment system...")
+                    print(f"🔗 Payment API: {payment_url}")
+                    
+                    # Create payment using your existing system
+                    try:
+                        payment_data = {
+                            "amount": int(order.get('amount') * 100),  # Convert to paise
+                            "booking_id": f"subscription_{worker_id}_{order.get('order_id')}"
+                        }
+                        
+                        r_payment = requests.post(payment_url, json=payment_data)
+                        
+                        if r_payment.status_code == 200:
+                            payment_response = r_payment.json()
+                            print("✅ Payment order created successfully!")
+                            print(f"   Payment Order ID: {payment_response.get('order_id')}")
+                            print(f"   Amount: ₹{payment_response.get('amount')}")
+                            print(f"   Key: {payment_response.get('key')}")
+                            
+                            # Build frontend payment URL (using your existing frontend)
+                            frontend_url = f"http://127.0.0.1:5001/payment?order_id={payment_response.get('order_id')}&amount={payment_response.get('amount')}&key={payment_response.get('key')}"
+                            
+                            print(f"\n🌐 Opening payment page...")
+                            print(f"🔗 Payment URL: {frontend_url}")
+                            
+                            # Open browser for payment (using your frontend)
+                            try:
+                                import webbrowser
+                                webbrowser.open(frontend_url)
+                                print("📱 Payment page opened in browser")
+                            except:
+                                print("⚠️ Could not open browser automatically")
+                                print(f"📱 Please visit: {frontend_url}")
+                            
+                            print("\n💡 Instructions:")
+                            print("1. Complete payment on your payment page")
+                            print("2. After payment, enter 'y' to confirm")
+                            print("3. Or enter 'n' to cancel")
+                            
+                            payment_confirmed = input("\n✅ Payment completed? (y/n): ").lower().strip()
+                            
+                            if payment_confirmed in ['y', 'yes', 'Y', 'YES']:
+                                # Get payment ID from user (in real implementation, this would come from webhook)
+                                payment_id = input("💳 Enter Payment ID (or press Enter for demo): ").strip()
+                                if not payment_id:
+                                    payment_id = f"PAY_{random.randint(100000, 999999)}"
+                                
+                                # Confirm payment
+                                r_confirm = requests.post(f"{API}/api/subscription/confirm", json={
+                                    "worker_id": worker_id,
+                                    "order_id": order.get('order_id'),
+                                    "payment_id": payment_id
+                                })
+                                
+                                if r_confirm.status_code == 200:
+                                    confirm_data = r_confirm.json()
+                                    print("✅ Subscription created successfully!")
+                                    print(f"📋 Plan: {selected_plan['name']}")
+                                    print(f"💳 Payment ID: {payment_id}")
+                                    print(f"🎉 {confirm_data.get('message', 'Subscription activated!')}")
+                                else:
+                                    print("❌ Payment confirmation failed")
+                                    print(r_confirm.json().get("error", "Unknown error"))
+                            else:
+                                print("❌ Payment cancelled")
+                        else:
+                            print("❌ Failed to create payment order")
+                            print(r_payment.json())
+                            
+                    except Exception as e:
+                        print(f"❌ Payment system error: {e}")
+                        print("🔄 Falling back to demo mode...")
+                        payment_id = f"PAY_{random.randint(100000, 999999)}"
+                        
+                        # Confirm payment
+                        r_confirm = requests.post(f"{API}/api/subscription/confirm", json={
+                            "worker_id": worker_id,
+                            "order_id": order.get('order_id'),
+                            "payment_id": payment_id
+                        })
+                        
+                        if r_confirm.status_code == 200:
+                            confirm_data = r_confirm.json()
+                            print("✅ Subscription created successfully! (Demo Mode)")
+                            print(f"📋 Plan: {selected_plan['name']}")
+                            print(f"💳 Payment ID: {payment_id}")
+                            print(f"🎉 {confirm_data.get('message', 'Subscription activated!')}")
+                        else:
+                            print("❌ Payment confirmation failed")
+                            print(r_confirm.json().get("error", "Unknown error"))
+                else:
+                    print("✅ Free plan activated!")
+                    print(f"📋 Plan: {selected_plan['name']}")
             else:
-                print("❌ Error creating subscription")
-                print(r.json().get("error", "Unknown error"))
+                print("❌ Error creating subscription order")
+                print(r_order.json().get("error", "Unknown error"))
         else:
             print("❌ Subscription cancelled")
             
@@ -1760,7 +2032,7 @@ def subscribe_to_plan(worker_id):
 
 def view_subscription_stats(worker_id):
     """View subscription usage statistics"""
-    r = requests.get(f"{API}/subscription/stats/{worker_id}")
+    r = requests.get(f"{API}/api/subscription/stats/{worker_id}")
     if r.status_code == 200:
         data = r.json()
         stats = data.get("stats")
@@ -1770,16 +2042,17 @@ def view_subscription_stats(worker_id):
             print("📊 SUBSCRIPTION STATISTICS")
             print("="*60)
             print(f"📋 Current Plan: {stats['plan_name']}")
-            print(f"📅 End Date: {stats['end_date'][:10]}")
-            print(f"📊 Max Appointments/Day: {stats['max_appointments']}")
+            print(f"📅 End Date: {stats['end_date'][:10] if stats['end_date'] else 'N/A'}")
+            print(f"📊 Daily Limit: {stats['daily_limit']}")
             print(f"📈 Today's Usage: {stats['today_usage']}")
             print(f"🔄 Remaining Today: {stats['remaining_today']}")
             
             # Calculate days remaining
-            from datetime import datetime
-            end_date = datetime.fromisoformat(stats['end_date'])
-            days_remaining = (end_date - datetime.now()).days
-            print(f"⏰ Days Remaining: {days_remaining}")
+            if stats['end_date']:
+                from datetime import datetime
+                end_date = datetime.fromisoformat(stats['end_date'])
+                days_remaining = (end_date - datetime.now()).days
+                print(f"⏰ Days Remaining: {days_remaining}")
         else:
             print("\n❌ No active subscription")
     else:
@@ -1790,7 +2063,7 @@ def view_subscription_stats(worker_id):
 def cancel_subscription(worker_id):
     """Cancel current subscription"""
     # Check if user has active subscription
-    r = requests.get(f"{API}/subscription/current/{worker_id}")
+    r = requests.get(f"{API}/api/subscription/current?worker_id={worker_id}")
     if r.status_code == 200:
         data = r.json()
         if not data.get("subscription"):
@@ -1800,7 +2073,7 @@ def cancel_subscription(worker_id):
     
     confirm = input("\n⚠️ Are you sure you want to cancel your subscription? (y/n): ").lower()
     if confirm == 'y':
-        r = requests.post(f"{API}/subscription/cancel/{worker_id}")
+        r = requests.post(f"{API}/api/subscription/cancel/{worker_id}")
         if r.status_code == 200:
             print("✅ Subscription cancelled successfully")
             print("📅 You can continue using features until the end of your billing period")
@@ -3114,6 +3387,304 @@ def doctor_video_appointments(worker_id):
 
         elif choice == len(appointments)+2:
             return
+
+def create_video_session_cli(worker_id):
+    """Create video session and get OTP"""
+    print("\n🎥 CREATE VIDEO SESSION")
+    print("="*60)
+    
+    # Get doctor's appointments
+    r = requests.get(f"{API}/worker/appointments/{worker_id}")
+    if r.status_code != 200:
+        print("❌ Failed to fetch appointments")
+        input("\nPress Enter...")
+        return
+    
+    appointments = r.json()
+    accepted_appointments = [apt for apt in appointments if apt['status'] == 'accepted']
+    
+    if not accepted_appointments:
+        print("📭 No accepted appointments found")
+        input("\nPress Enter...")
+        return
+    
+    print("📋 Select Appointment:")
+    for idx, apt in enumerate(accepted_appointments, 1):
+        print(f"[{idx}] Appointment #{apt['id']} - {apt['user_name']}")
+    
+    try:
+        choice = int(input("\nSelect appointment: ")) - 1
+        if choice < 0 or choice >= len(accepted_appointments):
+            print("❌ Invalid selection")
+            return
+        
+        appointment_id = accepted_appointments[choice]['id']
+        
+        # Create video session
+        r = requests.post(f"{API}/video/create-session/{appointment_id}", 
+                         json={"doctor_id": worker_id})
+        
+        if r.status_code == 201:
+            data = r.json()
+            session = data['session']
+            print("✅ Video session created successfully!")
+            print(f"📋 Appointment ID: {appointment_id}")
+            print(f"🔑 OTP: {session['doctor_otp']}")
+            print(f"🏠 Room ID: {session['room_id']}")
+            print("\n💡 Save this OTP to start video call!")
+        else:
+            error_data = r.json()
+            print(f"❌ Error: {error_data.get('message', 'Unknown error')}")
+            
+    except ValueError:
+        print("❌ Invalid input")
+    
+    input("\nPress Enter to continue...")
+
+def start_video_call_cli(worker_id):
+    """Start video call with OTP verification"""
+    print("\n🎥 START VIDEO CALL")
+    print("="*60)
+    
+    # Get doctor's video sessions
+    r = requests.get(f"{API}/worker/appointments/{worker_id}")
+    if r.status_code != 200:
+        print("❌ Failed to fetch appointments")
+        input("\nPress Enter...")
+        return
+    
+    appointments = r.json()
+    accepted_appointments = [apt for apt in appointments if apt['status'] in ['accepted', 'in_progress']]
+    
+    if not accepted_appointments:
+        print("📭 No appointments ready for video call")
+        input("\nPress Enter...")
+        return
+    
+    print("📋 Select Appointment:")
+    for idx, apt in enumerate(accepted_appointments, 1):
+        print(f"[{idx}] Appointment #{apt['id']} - {apt['user_name']} ({apt['status']})")
+    
+    try:
+        choice = int(input("\nSelect appointment: ")) - 1
+        if choice < 0 or choice >= len(accepted_appointments):
+            print("❌ Invalid selection")
+            return
+        
+        appointment_id = accepted_appointments[choice]['id']
+        otp = input("🔑 Enter OTP: ").strip()
+        
+        # Start video call
+        r = requests.post(f"{API}/video/start", 
+                         json={
+                             "appointment_id": appointment_id,
+                             "otp": otp,
+                             "doctor_id": worker_id
+                         })
+        
+        if r.status_code == 200:
+            data = r.json()
+            print("✅ Video call started successfully!")
+            print(f"🏠 Room ID: {data['room_id']}")
+            print(f"📋 Session Status: {data['session']['session_status']}")
+            print("\n💡 Patients can now join call!")
+            print("🔗 Room is live and ready for WebRTC connections")
+        else:
+            error_data = r.json()
+            print(f"❌ Error: {error_data.get('message', 'Unknown error')}")
+            
+    except ValueError:
+        print("❌ Invalid input")
+    
+    input("\nPress Enter to continue...")
+
+def end_video_call_cli(worker_id):
+    """End video call"""
+    print("\n🎥 END VIDEO CALL")
+    print("="*60)
+    
+    # Get active video sessions
+    r = requests.get(f"{API}/video/active-sessions")
+    if r.status_code != 200:
+        print("❌ Failed to fetch active sessions")
+        input("\nPress Enter...")
+        return
+    
+    data = r.json()
+    sessions = data['sessions']
+    
+    # Filter sessions for this doctor
+    doctor_sessions = []
+    for session in sessions:
+        # Get appointment details to check doctor
+        r_apt = requests.get(f"{API}/appointment/{session['appointment_id']}")
+        if r_apt.status_code == 200:
+            apt = r_apt.json()
+            if str(apt.get('doctor_id')) == str(worker_id):
+                doctor_sessions.append(session)
+    
+    if not doctor_sessions:
+        print("📭 No active video sessions found")
+        input("\nPress Enter...")
+        return
+    
+    print("📋 Select Active Session:")
+    for idx, session in enumerate(doctor_sessions, 1):
+        print(f"[{idx}] Room: {session['room_id']} (Status: {session['session_status']})")
+    
+    try:
+        choice = int(input("\nSelect session to end: ")) - 1
+        if choice < 0 or choice >= len(doctor_sessions):
+            print("❌ Invalid selection")
+            return
+        
+        session = doctor_sessions[choice]
+        appointment_id = session['appointment_id']
+        
+        # End video call
+        r = requests.post(f"{API}/video/end", 
+                         json={
+                             "appointment_id": appointment_id,
+                             "user_id": worker_id,
+                             "user_type": "doctor"
+                         })
+        
+        if r.status_code == 200:
+            data = r.json()
+            print("✅ Video call ended successfully!")
+            print(f"📋 Session Status: {data['session']['session_status']}")
+            print("📊 Appointment marked as completed")
+        else:
+            error_data = r.json()
+            print(f"❌ Error: {error_data.get('message', 'Unknown error')}")
+            
+    except ValueError:
+        print("❌ Invalid input")
+    
+    input("\nPress Enter to continue...")
+
+def join_video_call_cli(user_id):
+    """Patient joins video call"""
+    print("\n🎥 JOIN VIDEO CALL")
+    print("="*60)
+    
+    # Get user's appointments
+    r = requests.get(f"{API}/user/appointments", headers={"Authorization": f"Bearer {TOKEN}"})
+    if r.status_code != 200:
+        print("❌ Failed to fetch appointments")
+        input("\nPress Enter...")
+        return
+    
+    appointments = r.json()
+    video_appointments = [apt for apt in appointments if apt['status'] in ['in_progress']]
+    
+    if not video_appointments:
+        print("📭 No video calls available to join")
+        print("💡 Please wait for doctor to start call")
+        input("\nPress Enter...")
+        return
+    
+    print("📋 Select Video Call to Join:")
+    for idx, apt in enumerate(video_appointments, 1):
+        print(f"[{idx}] Appointment #{apt['id']} - Dr. {apt.get('doctor_name', 'Unknown')}")
+    
+    try:
+        choice = int(input("\nSelect video call: ")) - 1
+        if choice < 0 or choice >= len(video_appointments):
+            print("❌ Invalid selection")
+            return
+        
+        appointment_id = video_appointments[choice]['id']
+        
+        # Join video call
+        r = requests.get(f"{API}/video/join/{appointment_id}")
+        
+        if r.status_code == 200:
+            data = r.json()
+            print("✅ Successfully joined video call!")
+            print(f"🏠 Room ID: {data['room_id']}")
+            print(f"📋 Session Status: {data['session']['session_status']}")
+            print("\n💡 Ready for WebRTC connection!")
+            print("🔗 Use this Room ID to establish video connection")
+        else:
+            error_data = r.json()
+            print(f"❌ Error: {error_data.get('message', 'Unknown error')}")
+            
+    except ValueError:
+        print("❌ Invalid input")
+    
+    input("\nPress Enter to continue...")
+
+def video_menu_doctor(worker_id):
+    """Video consultation menu for doctors"""
+    while True:
+        print("\n" + "="*60)
+        print("🎥 VIDEO CONSULTATION")
+        print("="*60)
+        print("1. 📋 Create Video Session (Get OTP)")
+        print("2. 🎥 Start Video Call")
+        print("3. 🛑 End Video Call")
+        print("4. 📊 View Active Sessions")
+        print("5. ⬅️ Back")
+        
+        choice = input("\nSelect option: ").strip()
+        
+        if choice == "1":
+            create_video_session_cli(worker_id)
+        elif choice == "2":
+            start_video_call_cli(worker_id)
+        elif choice == "3":
+            end_video_call_cli(worker_id)
+        elif choice == "4":
+            # View active sessions
+            r = requests.get(f"{API}/video/active-sessions")
+            if r.status_code == 200:
+                data = r.json()
+                sessions = data['sessions']
+                print("\n📊 ACTIVE VIDEO SESSIONS:")
+                for session in sessions:
+                    print(f"🏠 Room: {session['room_id']}")
+                    print(f"📋 Status: {session['session_status']}")
+                    print(f"📅 Started: {session['started_at'] or 'Not started'}")
+                    print("-"*40)
+            else:
+                print("❌ Failed to fetch active sessions")
+            input("\nPress Enter...")
+        elif choice == "5":
+            break
+
+def video_menu_user(user_id):
+    """Video consultation menu for users"""
+    while True:
+        print("\n" + "="*60)
+        print("🎥 VIDEO CONSULTATION")
+        print("="*60)
+        print("1. 🎥 Join Live Consultation")
+        print("2. 📊 My Video Appointments")
+        print("3. ⬅️ Back")
+        
+        choice = input("\nSelect option: ").strip()
+        
+        if choice == "1":
+            join_video_call_cli(user_id)
+        elif choice == "2":
+            # View video appointments
+            r = requests.get(f"{API}/user/appointments", headers={"Authorization": f"Bearer {TOKEN}"})
+            if r.status_code == 200:
+                appointments = r.json().get("appointments", [])
+                video_appts = [apt for apt in appointments if apt['status'] in ['accepted', 'in_progress', 'completed']]
+                print("\n📋 MY VIDEO APPOINTMENTS:")
+                for apt in video_appts:
+                    print(f"🏥 Appointment #{apt['id']}")
+                    print(f"👨‍⚕️ Doctor: {apt.get('doctor_name', 'Unknown')}")
+                    print(f"📋 Status: {apt['status']}")
+                    print(f"📅 Date: {apt.get('appointment_date', 'N/A')}")
+                    print("-"*40)
+            else:
+                print("❌ Failed to fetch appointments")
+            input("\nPress Enter...")
+        elif choice == "3":
+            break
 
 
 if __name__ == "__main__":

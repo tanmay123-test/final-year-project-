@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO
 from meeting_utils import create_meeting_link
 import random
 from user_db import UserDB
@@ -23,6 +24,16 @@ print("🔥 USING appointment_db FROM:", appointment_db.__file__)
 
 from video_db import VideoConsultDB
 from notification_service import notify_user, notify_doctor
+from payment_service import payment_service
+
+# Import subscription system
+from subscription.subscription_service import subscription_service
+from subscription.subscription_routes import subscription_bp
+
+# Import video consultation system
+from services.video_signaling import init_video_signaling
+from services.video_session_db import video_session_db
+from routes.video_routes import video_bp
 
 video_db = VideoConsultDB()
 video_db.create_table()
@@ -32,6 +43,26 @@ from datetime import datetime
 app = Flask(__name__)
 # CORS: web (5173, 5174), Expo (8081), mobile (null), Android emulator
 CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:8081", "http://localhost:19006", "null"]}})
+
+# Register subscription blueprint
+app.register_blueprint(subscription_bp)
+
+# Register payment blueprint
+try:
+    from payment.payments.payment_route import payment_bp
+    app.register_blueprint(payment_bp)
+    print("✅ Payment blueprint registered")
+except ImportError as e:
+    print(f"⚠️ Could not register payment blueprint: {e}")
+    print("🔄 Subscription will use demo mode")
+
+# Register video consultation blueprint
+app.register_blueprint(video_bp)
+print("✅ Video consultation blueprint registered")
+
+# Initialize WebSocket signaling server
+socketio = init_video_signaling(app)
+print("✅ Video signaling server initialized")
 
 # ================= DATABASE =================
 user_db = UserDB()
@@ -466,37 +497,73 @@ def respond():
         print(f"❌ Appointment {appointment_id} not found")
         return jsonify({"error": "Appointment not found"}), 404
 
+    # ===== SUBSCRIPTION VALIDATION =====
+    if status == "accepted":
+        worker_id = appointment["worker_id"]
+        
+        # Check subscription eligibility before accepting appointment
+        eligibility = subscription_service.check_worker_eligibility(worker_id)
+        
+        if not eligibility['valid']:
+            print(f"❌ Subscription check failed for worker {worker_id}: {eligibility['error']}")
+            return jsonify({
+                "error": eligibility['error'],
+                "subscription_required": True
+            }), 402
+        
+        # Track usage for accepted appointment
+        subscription_service.track_appointment_acceptance(worker_id)
+        print(f"✅ Usage tracked for worker {worker_id}")
+
     # Update appointment status
     appt_db.respond(appointment_id, status)
     print(f"✅ Appointment {appointment_id} status updated to {status}")
 
-    # ===== VIDEO CONSULTATION ACCEPTED FLOW =====
-    if status == "accepted" and appointment["appointment_type"] == "video":
-        print(f"🎥 Processing video consultation acceptance for appointment {appointment_id}")
-
-        # Generate meeting link + OTP
-        meeting_link, otp, video_room = appt_db.set_video_details(appointment_id)
+    # ===== PAYMENT REQUIRED FLOW =====
+    if status == "accepted":
+        # Get doctor consultation fee
+        doctor_fee = worker_db.get_worker_consultation_fee(appointment["worker_id"])
         
-        print(f"📧 Video consultation accepted:")
-        print(f"   Meeting: {meeting_link}")
-        print(f"   OTP: {otp}")
-        print(f"   Patient: {appointment['user_name']}")
-
-        # Generate video call URLs
-        doctor_url = f"http://127.0.0.1:5001/video-call/{appointment_id}?role=doctor"
-        patient_url = f"http://127.0.0.1:5001/video-call/{appointment_id}?role=user"
+        # Update appointment with payment pending status
+        conn = appt_db.get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE appointments 
+            SET status='payment_pending', payment_status='pending'
+            WHERE id=?
+        """, (appointment_id,))
+        conn.commit()
+        conn.close()
         
-        print(f"� Doctor URL: {doctor_url}")
-        print(f"🔗 Patient URL: {patient_url}")
+        print(f"💰 Payment required for appointment {appointment_id}")
+        print(f"   Doctor fee: ₹{doctor_fee}")
+        
+        # ===== VIDEO CONSULTATION ACCEPTED FLOW =====
+        if appointment["appointment_type"] == "video":
+            print(f"🎥 Processing video consultation acceptance for appointment {appointment_id}")
 
+            # Don't generate meeting details yet - wait for payment
+            print(f"📧 Video consultation accepted - payment pending:")
+            print(f"   Patient: {appointment['user_name']}")
+            print(f"   Payment required before consultation")
+
+            return jsonify({
+                "success": True,
+                "appointment_id": appointment_id,
+                "status": "accepted",
+                "payment_required": True,
+                "doctor_fee": doctor_fee,
+                "message": "Appointment accepted. Payment required to proceed."
+            }), 200
+        
+        # For clinic appointments
         return jsonify({
             "success": True,
             "appointment_id": appointment_id,
-            "meeting_link": meeting_link,
-            "otp": otp,
-            "doctor_url": doctor_url,
-            "patient_url": patient_url,
-            "message": "Video consultation accepted. OTP generated."
+            "status": "accepted", 
+            "payment_required": True,
+            "doctor_fee": doctor_fee,
+            "message": "Appointment accepted. Payment required to confirm booking."
         }), 200
 
     print(f"✅ Response recorded for appointment {appointment_id}")
@@ -516,6 +583,11 @@ def start_video():
     if not appointment:
         print(f"❌ Appointment {appointment_id} not found")
         return jsonify({"error": "Not found"}), 404
+
+    # Check payment status before allowing video consultation
+    if appointment.get("payment_status") != "paid":
+        print(f"❌ Payment not completed for appointment {appointment_id}")
+        return jsonify({"error": "Payment required before starting consultation"}), 402
 
     if not appt_db.verify_otp(appointment_id, otp):
         print(f"❌ Invalid OTP for appointment {appointment_id}")
@@ -537,12 +609,47 @@ def video_link(appointment_id):
     if appointment["appointment_type"] != "video":
         return jsonify({"error": "Not video"}), 400
 
+    # Check payment status before allowing video consultation
+    if appointment.get("payment_status") != "paid":
+        return jsonify({"error": "Payment required before joining consultation"}), 402
+
     if appointment["status"] != "in_consultation":
         return jsonify({"error": "Not started"}), 403
 
     # Return the video call URL
     video_url = f"http://127.0.0.1:5001/video-call/{appointment_id}?role=user"
     return jsonify({"video_link": video_url}), 200
+
+@app.route("/appointment/<int:appointment_id>", methods=["GET"])
+def get_appointment_detail(appointment_id):
+    """Get detailed appointment information"""
+    # Get sender role from query parameter
+    sender_role = request.args.get("sender_role", "user")
+    
+    # Require authentication based on sender role
+    if sender_role == "user":
+        username = require_auth()
+        if not username:
+            return jsonify({"error": "Authentication required"}), 401
+    elif sender_role == "worker":
+        worker_email = require_worker_auth()
+        if not worker_email:
+            return jsonify({"error": "Worker authentication required"}), 401
+    
+    # Get appointment details
+    appointment = appt_db.get_by_id(appointment_id)
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
+    
+    # Add payment information
+    appointment_data = dict(appointment)
+    
+    # Get payment status if available
+    payment_info = payment_service.get_appointment_payment_status(appointment_id)
+    if payment_info:
+        appointment_data.update(payment_info)
+    
+    return jsonify(appointment_data), 200
 
 
 
@@ -695,6 +802,17 @@ def admin_pending_workers():
 @app.route("/admin/worker/approve/<int:worker_id>", methods=["POST"])
 def admin_approve_worker(worker_id):
     worker_db.approve_worker(worker_id)
+    
+    # Assign free trial to approved worker
+    try:
+        trial_result = subscription_service.assign_free_trial_to_worker(worker_id)
+        if trial_result['success']:
+            print(f"✅ Free trial assigned to worker {worker_id}")
+        else:
+            print(f"⚠️ Failed to assign free trial to worker {worker_id}: {trial_result['message']}")
+    except Exception as e:
+        print(f"❌ Error assigning free trial: {e}")
+    
     return jsonify({"msg": "Worker approved"}), 200
 
 @app.route("/admin/worker/reject/<int:worker_id>", methods=["POST"])
@@ -702,6 +820,177 @@ def admin_reject_worker(worker_id):
     worker_db.reject_worker(worker_id)
     return jsonify({"msg": "Worker rejected"}), 200
 
+# ================= TEST PAGES =================
+@app.route("/test-payment")
+def test_payment_page():
+    """Test payment integration page"""
+    from flask import send_from_directory
+    return send_from_directory('.', 'payment_test.html')
+
+@app.route("/test-doctor-profile")
+def test_doctor_profile_page():
+    """Test doctor profile management page"""
+    from flask import send_from_directory
+    return send_from_directory('.', 'doctor_profile_test.html')
+
+# ================= PAYMENT ENDPOINTS =================
+@app.route("/api/payment/create-order", methods=["POST"])
+def create_payment_order():
+    """Create Razorpay order for appointment payment"""
+    data = request.json
+    appointment_id = data["appointment_id"]
+    
+    # Get appointment details
+    appointment = appt_db.get_by_id(appointment_id)
+    if not appointment:
+        return jsonify({"error": "Appointment not found"}), 404
+    
+    # Check if payment is already processed
+    if appointment.get("payment_status") == "paid":
+        return jsonify({"error": "Payment already completed"}), 400
+    
+    # Get doctor consultation fee
+    doctor_fee = worker_db.get_worker_consultation_fee(appointment["worker_id"])
+    
+    # Create payment order
+    try:
+        order_result = payment_service.create_payment_order(appointment_id, doctor_fee)
+        
+        print(f"💰 Payment order created for appointment {appointment_id}")
+        print(f"   Doctor fee: ₹{doctor_fee}")
+        print(f"   Total amount: ₹{order_result['amount']}")
+        
+        return jsonify(order_result), 200
+        
+    except Exception as e:
+        print(f"❌ Payment order creation failed: {e}")
+        return jsonify({"error": "Failed to create payment order"}), 500
+
+@app.route("/api/payment/confirm", methods=["POST"])
+def confirm_payment():
+    """Confirm payment and update appointment status"""
+    data = request.json
+    appointment_id = data["appointment_id"]
+    razorpay_payment_id = data["razorpay_payment_id"]
+    
+    # Verify payment with Razorpay (additional security)
+    if not payment_service.verify_payment_with_razorpay(razorpay_payment_id):
+        return jsonify({"error": "Payment verification failed"}), 400
+    
+    # Confirm payment in database
+    success = payment_service.confirm_payment(appointment_id, razorpay_payment_id)
+    
+    if success:
+        # Get appointment details for video consultation setup
+        appointment = appt_db.get_by_id(appointment_id)
+        
+        # If it's a video consultation, generate meeting details now
+        if appointment["appointment_type"] == "video":
+            meeting_link, otp, video_room = appt_db.set_video_details(appointment_id)
+            
+            print(f"🎥 Video consultation details generated after payment:")
+            print(f"   Meeting: {meeting_link}")
+            print(f"   OTP: {otp}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Payment confirmed. Appointment confirmed.",
+                "appointment_status": "confirmed",
+                "video_details": {
+                    "meeting_link": meeting_link,
+                    "otp": otp,
+                    "doctor_url": f"http://127.0.0.1:5001/video-call/{appointment_id}?role=doctor",
+                    "patient_url": f"http://127.0.0.1:5001/video-call/{appointment_id}?role=user"
+                }
+            }), 200
+        
+        # For clinic appointments
+        return jsonify({
+            "success": True,
+            "message": "Payment confirmed. Appointment confirmed.",
+            "appointment_status": "confirmed"
+        }), 200
+    else:
+        return jsonify({"error": "Payment confirmation failed"}), 400
+
+@app.route("/api/payment/status/<int:appointment_id>", methods=["GET"])
+def get_payment_status(appointment_id):
+    """Get payment status for an appointment"""
+    payment_info = payment_service.get_appointment_payment_status(appointment_id)
+    
+    if payment_info:
+        return jsonify(payment_info), 200
+    else:
+        return jsonify({"error": "Appointment not found"}), 404
+
+# ================= DOCTOR PROFILE MANAGEMENT =================
+@app.route("/api/doctor/update-fee", methods=["PUT"])
+def update_consultation_fee():
+    """Update doctor consultation fee - Doctor authentication required"""
+    # Get doctor token from Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Authorization token required"}), 401
+    
+    token = auth_header.split(" ")[1]
+    doctor_email = verify_token(token)
+    
+    if not doctor_email:
+        return jsonify({"error": "Invalid or expired token"}), 401
+    
+    # Get doctor ID from email
+    worker_id = worker_db.get_worker_by_email(doctor_email)
+    if not worker_id:
+        return jsonify({"error": "Doctor not found"}), 404
+    
+    data = request.json
+    consultation_fee = data.get("consultation_fee")
+    
+    # Validate consultation fee
+    if not consultation_fee or not isinstance(consultation_fee, (int, float)) or consultation_fee < 0:
+        return jsonify({"error": "Valid consultation fee required"}), 400
+    
+    # Update consultation fee
+    success = worker_db.update_consultation_fee(worker_id, int(consultation_fee))
+    
+    if success:
+        print(f"💰 Doctor {worker_id} updated consultation fee to ₹{consultation_fee}")
+        return jsonify({
+            "success": True,
+            "message": "Consultation fee updated successfully",
+            "consultation_fee": int(consultation_fee)
+        }), 200
+    else:
+        return jsonify({"error": "Failed to update consultation fee"}), 500
+
+@app.route("/api/doctor/profile", methods=["GET"])
+def get_doctor_profile():
+    """Get doctor profile including consultation fee - Doctor authentication required"""
+    # Get doctor token from Authorization header
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Authorization token required"}), 401
+    
+    token = auth_header.split(" ")[1]
+    doctor_email = verify_token(token)
+    
+    if not doctor_email:
+        return jsonify({"error": "Invalid or expired token"}), 401
+    
+    # Get doctor ID from email
+    worker_id = worker_db.get_worker_by_email(doctor_email)
+    if not worker_id:
+        return jsonify({"error": "Doctor not found"}), 404
+    
+    # Get doctor profile
+    profile = worker_db.get_worker_profile(worker_id)
+    
+    if profile:
+        return jsonify(profile), 200
+    else:
+        return jsonify({"error": "Profile not found"}), 404
+
 # ================= RUN =================
 if __name__ == "__main__":
-    app.run(debug=True, port=5000, host="0.0.0.0")
+    # Use SocketIO for WebSocket support
+    socketio.run(app, debug=True, port=5000, host="0.0.0.0")

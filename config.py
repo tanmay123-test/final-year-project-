@@ -56,3 +56,17 @@ HEALTHCARE_REQUIRED_DOCS = [
 ]
 
 os.makedirs(HEALTHCARE_UPLOAD_DIR, exist_ok=True)
+
+# ==================================================
+# ================= RAZORPAY PAYMENT ================
+# ==================================================
+
+RAZORPAY_KEY_ID = "rzp_test_SEXZkBLNwP5IAF"
+RAZORPAY_KEY_SECRET = "Y6m69PyWHpwW08YNmrZPp8qm"
+WEBHOOK_SECRET = "mysecret123"
+
+# ==================================================
+# ================= PAYMENT SETTINGS ===============
+# ==================================================
+
+PLATFORM_COMMISSION_RATE = 0.20  # 20% platform commission

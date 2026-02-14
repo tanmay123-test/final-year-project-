@@ -35,9 +35,28 @@ class WorkerDB:
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 license_number TEXT,
-                password TEXT
+                password TEXT,
+                consultation_fee INTEGER DEFAULT 400
             )
         """)
+        
+        # Check and add missing columns (migration)
+        cursor.execute("PRAGMA table_info(workers)")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        
+        required_columns = {
+            'id', 'full_name', 'email', 'phone', 'service', 'specialization',
+            'experience', 'clinic_location', 'rating', 'photo_url', 'status',
+            'created_at', 'license_number', 'password', 'consultation_fee'
+        }
+        
+        missing_columns = required_columns - existing_columns
+        
+        for column in missing_columns:
+            if column == 'consultation_fee':
+                print(f"🔄 Adding missing column: {column}")
+                cursor.execute("ALTER TABLE workers ADD COLUMN consultation_fee INTEGER DEFAULT 400")
+        
         self.conn.commit()
 
     def _row_to_dict(self, row):
@@ -48,7 +67,7 @@ class WorkerDB:
             d["name"] = d.get("full_name") or d.get("name", "")
         return d
 
-    def register_worker(self, full_name, email, phone, service, specialization, experience, clinic_location="", license_number=None, password=None):
+    def register_worker(self, full_name, email, phone, service, specialization, experience, clinic_location="", license_number=None, password=None, consultation_fee=400):
         cursor = self.conn.cursor()
         hashed_pw = None
         if password:
@@ -56,9 +75,9 @@ class WorkerDB:
             
         try:
             cursor.execute("""
-                INSERT INTO workers (full_name, email, phone, service, specialization, experience, clinic_location, license_number, password)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (full_name, email, phone, service, specialization, int(experience or 0), clinic_location or "", license_number, hashed_pw))
+                INSERT INTO workers (full_name, email, phone, service, specialization, experience, clinic_location, license_number, password, consultation_fee)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (full_name, email, phone, service, specialization, int(experience or 0), clinic_location or "", license_number, hashed_pw, int(consultation_fee)))
             self.conn.commit()
             return cursor.lastrowid
         except sqlite3.IntegrityError:
@@ -125,3 +144,53 @@ class WorkerDB:
         cursor = self.conn.cursor()
         cursor.execute("UPDATE workers SET status = 'rejected' WHERE id = ?", (worker_id,))
         self.conn.commit()
+    
+    def get_worker_consultation_fee(self, worker_id):
+        """Get consultation fee for a worker"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT consultation_fee FROM workers WHERE id = ?", (worker_id,))
+        result = cursor.fetchone()
+        return result[0] if result else 400  # Default fee
+    
+    def update_consultation_fee(self, worker_id, consultation_fee):
+        """Update consultation fee for a worker"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE workers 
+            SET consultation_fee = ? 
+            WHERE id = ?
+        """, (int(consultation_fee), worker_id))
+        self.conn.commit()
+        return cursor.rowcount > 0
+    
+    def get_worker_profile(self, worker_id):
+        """Get complete worker profile including consultation fee"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT full_name, email, phone, specialization, experience, 
+                   clinic_location, consultation_fee, rating, status
+            FROM workers 
+            WHERE id = ?
+        """, (worker_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return {
+                "doctor_name": result[0],
+                "email": result[1],
+                "phone": result[2],
+                "specialization": result[3],
+                "experience": result[4],
+                "clinic_location": result[5],
+                "consultation_fee": result[6],
+                "rating": result[7],
+                "status": result[8]
+            }
+        return None
+    
+    def get_worker_by_email(self, email):
+        """Get worker ID by email"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM workers WHERE email = ?", (email,))
+        result = cursor.fetchone()
+        return result[0] if result else None
