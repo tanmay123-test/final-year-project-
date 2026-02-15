@@ -98,6 +98,7 @@ export const appointmentService = {
   bookClinic: (data) => api.post('/appointment/book', data),
   bookVideo: (data) => api.post('/appointment/video-request', data),
   getUserAppointments: () => api.get('/user/appointments'),
+  cancelAppointment: (appointmentId) => api.post('/appointment/cancel', { appointment_id: appointmentId }),
 };
 
 export const videoService = {

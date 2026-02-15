@@ -18,6 +18,8 @@ import DoctorAvailability from './pages/DoctorAvailability';
 import DoctorProfile from './pages/DoctorProfile';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AICare from './pages/AICare';
+import Profile from './pages/Profile';
 
 import UserLayout from './components/UserLayout';
 
@@ -48,7 +50,8 @@ const App = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/doctors" element={<DoctorSearch />} />
             <Route path="/book/:doctorId" element={<Booking />} />
-            <Route path="/profile" element={<div style={{padding: '2rem'}}><h2>Profile Page</h2><p>Coming Soon</p></div>} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/ai-care" element={<AICare />} />
           </Route>
 
           {/* Service Selection (No Bottom Nav) */}
