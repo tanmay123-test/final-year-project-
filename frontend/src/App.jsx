@@ -15,7 +15,9 @@ import ServiceSelection from './pages/ServiceSelection';
 import DoctorLogin from './pages/DoctorLogin';
 import DoctorDashboard from './pages/DoctorDashboard';
 import DoctorAvailability from './pages/DoctorAvailability';
+import DoctorRequests from './pages/DoctorRequests';
 import DoctorProfile from './pages/DoctorProfile';
+import DoctorAppointments from './pages/DoctorAppointments';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AICare from './pages/AICare';
@@ -80,10 +82,26 @@ const App = () => {
             } 
           />
           <Route 
+            path="/doctor/requests" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorRequests />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
             path="/doctor/profile" 
             element={
               <ProtectedWorkerRoute>
                 <DoctorProfile />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/appointments" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorAppointments />
               </ProtectedWorkerRoute>
             } 
           />

@@ -25,6 +25,7 @@ print("🔥 USING appointment_db FROM:", appointment_db.__file__)
 from video_db import VideoConsultDB
 from notification_service import notify_user, notify_doctor
 from payment_service import payment_service
+from config import USER_DB
 
 # Import subscription system
 from subscription.subscription_service import subscription_service
@@ -151,7 +152,7 @@ def user_info():
         return jsonify({"error": "User not found"}), 404
     
     # Get user name from database
-    conn = sqlite3.connect("data/users.db")
+    conn = sqlite3.connect(USER_DB)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM users WHERE id=?", (user_id,))
     result = cursor.fetchone()

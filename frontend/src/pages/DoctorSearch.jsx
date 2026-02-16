@@ -17,30 +17,25 @@ const DoctorSearch = () => {
   const [specializations, setSpecializations] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showAllSpecs, setShowAllSpecs] = useState(false);
 
-  // Icon mapping for specializations
-  const specIcons = {
-    'General': Stethoscope,
-    'General Physician': Stethoscope,
-    'Cardiology': Heart,
-    'Cardiologist': Heart,
-    'HEART': Heart,
-    'Dermatology': Activity,
-    'Dermatologist': Activity,
-    'Pediatrics': Baby,
-    'Pediatrician': Baby,
-    'Orthopedics': Bone,
-    'Orthopedic': Bone,
-    'Dentist': Stethoscope,
-    'Eye Specialist': Stethoscope,
-    'ENT': Stethoscope,
-    'Neurologist': Activity,
-    'Psychiatrist': Activity,
-    'Gynecologist': Activity,
-    'Urologist': Activity,
-    'Oncologist': Activity,
-    // Fallback
-    'default': Stethoscope
+  const emojiMap = {
+    'Cardiologist': '❤️',
+    'Dentist': '🦷',
+    'Dermatologist': '🧴',
+    'ENT': '👂',
+    'Eye Specialist': '👁️',
+    'General Physician': '🩺',
+    'Gynecologist': '🌸',
+    'Heart': '💗',
+    'Neurologist': '🧠',
+    'Oncologist': '🎗️',
+    'Orthopedic': '🦴',
+    'Pediatrician': '👶',
+    'Psychiatrist': '🧘',
+    'Surgeon': '🔪',
+    'Urologist': '💧',
+    'default': '🩺'
   };
 
   useEffect(() => {
@@ -82,8 +77,8 @@ const DoctorSearch = () => {
   };
 
   const getSpecIcon = (specName) => {
-    const Icon = specIcons[specName] || specIcons['default'];
-    return <Icon size={24} />;
+    const emoji = emojiMap[specName] || emojiMap['default'];
+    return <span className="spec-emoji">{emoji}</span>;
   };
 
   return (
@@ -117,10 +112,12 @@ const DoctorSearch = () => {
         <section className="section specializations-section">
           <div className="section-header">
             <h2>Specializations</h2>
-            <Link to="#" className="view-all">View All &gt;</Link>
+            <Link to="#" className="view-all" onClick={(e) => { e.preventDefault(); setShowAllSpecs((v) => !v); }}>
+              {showAllSpecs ? 'Close' : 'View All >'}
+            </Link>
           </div>
           
-          <div className="specializations-scroll">
+          <div className={showAllSpecs ? 'specializations-grid' : 'specializations-scroll'}>
             {specializations.length > 0 ? (
               specializations.map((spec, index) => (
                 <div key={index} className="spec-card" onClick={() => navigate(`/doctors?spec=${spec}`)}>
@@ -300,54 +297,66 @@ const DoctorSearch = () => {
           font-weight: 600;
         }
 
-        /* Specializations Scroll */
         .specializations-scroll {
           display: flex;
-          gap: 1rem;
+          gap: 0.75rem;
           overflow-x: auto;
           padding-bottom: 0.5rem;
-          scrollbar-width: none; /* Firefox */
+          scrollbar-width: none;
         }
 
         .specializations-scroll::-webkit-scrollbar {
-          display: none; /* Chrome/Safari */
+          display: none;
+        }
+
+        .specializations-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          gap: 1rem;
         }
 
         .spec-card {
-          min-width: 90px;
+          background: #F8FAFC;
+          border-radius: 18px;
+          padding: 0.8rem 0.6rem;
           display: flex;
           flex-direction: column;
           align-items: center;
           cursor: pointer;
+          box-shadow: var(--shadow-sm);
+          transition: transform 0.2s, box-shadow 0.2s;
+          min-width: 90px;
         }
 
-        .spec-icon-wrapper {
-          width: 70px;
-          height: 70px;
-          background: white; /* Default background */
-          border-radius: 20px;
+        .spec-card:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .specializations-scroll .spec-icon-wrapper {
+          width: 60px;
+          height: 60px;
+          border-radius: 16px;
+          background: #F1F5F9;
           display: flex;
           align-items: center;
           justify-content: center;
           margin-bottom: 0.5rem;
-          box-shadow: var(--shadow-sm);
-          transition: transform 0.2s;
-          color: var(--accent-blue); /* Replaced Purple Icon */
-        }
-        
-        /* Make some variety in icon backgrounds if possible, or stick to clean white */
-        .spec-card:nth-child(odd) .spec-icon-wrapper {
-           background-color: #F0F9FF; /* Light Blue tint */
-        }
-        
-        .spec-card:nth-child(even) .spec-icon-wrapper {
-           background-color: #F0FDFA; /* Light Teal tint */
         }
 
-        .spec-card:hover .spec-icon-wrapper {
-          transform: translateY(-3px);
-          box-shadow: var(--shadow-md);
+        .specializations-grid .spec-icon-wrapper {
+          width: 80px;
+          height: 80px;
+          border-radius: 22px;
+          background: #F1F5F9;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 0.6rem;
         }
+
+        .specializations-scroll .spec-emoji { font-size: 24px; line-height: 1; }
+        .specializations-grid .spec-emoji { font-size: 32px; line-height: 1; }
 
         .spec-name {
           font-size: 0.85rem;

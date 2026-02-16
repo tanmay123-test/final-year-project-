@@ -513,9 +513,11 @@ const Booking = () => {
         }
 
         .type-btn.active {
-          border-color: var(--primary-color);
+          border-color: var(--primary-color, #7D3C98);
           background: #F4ECF7; /* Light purple */
-          color: var(--primary-color);
+          color: var(--primary-color, #7D3C98);
+          font-weight: 700;
+          box-shadow: 0 0 0 2px rgba(125, 60, 152, 0.15);
         }
 
         .date-scroll {
@@ -545,9 +547,11 @@ const Booking = () => {
         }
 
         .date-card.active {
-          background: var(--primary-color);
-          border-color: var(--primary-color);
+          background: var(--primary-color, #7D3C98);
+          border-color: var(--primary-color, #7D3C98);
           color: white;
+          font-weight: 700;
+          box-shadow: 0 6px 16px rgba(125, 60, 152, 0.25);
         }
 
         .date-card.active .day-name, 
@@ -595,9 +599,11 @@ const Booking = () => {
         }
 
         .slot-btn.active {
-          background: var(--primary-color);
+          background: var(--primary-color, #7D3C98);
           color: white;
-          border-color: var(--primary-color);
+          border-color: var(--primary-color, #7D3C98);
+          font-weight: 700;
+          box-shadow: 0 4px 12px rgba(125, 60, 152, 0.2);
         }
 
         .no-slots {
@@ -629,7 +635,7 @@ const Booking = () => {
         }
 
         .submit-btn {
-          background: var(--primary-color);
+          background: var(--primary-color, #7D3C98);
           color: white;
           border: none;
           padding: 1.25rem;
@@ -639,6 +645,7 @@ const Booking = () => {
           cursor: pointer;
           margin-top: 1rem;
           transition: background 0.2s;
+          box-shadow: 0 6px 16px rgba(125, 60, 152, 0.25);
         }
 
         .submit-btn:disabled {
