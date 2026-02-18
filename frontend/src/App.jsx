@@ -17,6 +17,8 @@ import DoctorDashboard from './pages/DoctorDashboard';
 import DoctorAvailability from './pages/DoctorAvailability';
 import DoctorRequests from './pages/DoctorRequests';
 import DoctorProfile from './pages/DoctorProfile';
+import DoctorProfileDetails from './pages/DoctorProfileDetails';
+import DoctorSettings from './pages/DoctorSettings';
 import DoctorAppointments from './pages/DoctorAppointments';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -94,6 +96,22 @@ const App = () => {
             element={
               <ProtectedWorkerRoute>
                 <DoctorProfile />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/profile/details" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorProfileDetails />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/settings" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorSettings />
               </ProtectedWorkerRoute>
             } 
           />
