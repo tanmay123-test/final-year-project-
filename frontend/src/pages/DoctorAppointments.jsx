@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { workerService, videoService } from '../services/api';
+import { workerService, videoService, apiEvents } from '../services/api';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { Calendar as CalendarIcon, CheckCircle2, Video, MessageSquare, RefreshCcw, User, FileText } from 'lucide-react';
  
@@ -31,6 +31,13 @@ const DoctorAppointments = () => {
   useEffect(() => {
     fetchData();
   }, [worker]);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0,10);
+    const todayCount = upcoming.filter(a => a.booking_date === today).length;
+    if (todayCount > 0) {
+      apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: `You have ${todayCount} appointment(s) today` } }));
+    }
+  }, [upcoming]);
  
   const startVideo = async (id) => {
     const otp = window.prompt('Enter OTP to start video call');
@@ -38,9 +45,15 @@ const DoctorAppointments = () => {
     try {
       const res = await videoService.startVideo(id, otp);
       const link = res.data?.meeting_link;
-      if (link) window.open(link, '_blank');
+      if (link) {
+        apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Video consultation started' } }));
+        window.open(link, '_blank');
+      } else {
+        apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'No meeting link returned' } }));
+      }
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to start video');
+      const msg = e.response?.data?.error || 'Failed to start video';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
  
@@ -48,9 +61,15 @@ const DoctorAppointments = () => {
     try {
       const res = await videoService.getVideoLink(id);
       const link = res.data?.video_link;
-      if (link) window.open(link, '_blank');
+      if (link) {
+        apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'Joining video...' } }));
+        window.open(link, '_blank');
+      } else {
+        apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'No active video session' } }));
+      }
     } catch (e) {
-      alert(e.response?.data?.error || 'Unable to join. Is payment done and consultation started?');
+      const msg = e.response?.data?.error || 'Unable to join. Is payment done and consultation started?';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
  
@@ -61,9 +80,11 @@ const DoctorAppointments = () => {
       } else {
         await workerService.respondToRequest({ appointment_id: id, status: 'completed' });
       }
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Appointment marked completed' } }));
       fetchData();
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to complete appointment');
+      const msg = e.response?.data?.error || 'Failed to complete appointment';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
  

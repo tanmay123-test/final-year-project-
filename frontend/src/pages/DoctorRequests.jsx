@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { workerService } from '../services/api';
+import { workerService, apiEvents } from '../services/api';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { FileText, User, Calendar as CalendarIcon, RefreshCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -33,13 +33,22 @@ const DoctorRequests = () => {
  
   const formatType = (t) => t === 'video' ? 'VIDEO' : 'CLINIC';
   const pendingCount = requests.filter(r => r.status === 'pending').length;
+  const [prevPending, setPrevPending] = useState(0);
+  useEffect(() => {
+    if (pendingCount > prevPending) {
+      apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'New booking request received' } }));
+    }
+    setPrevPending(pendingCount);
+  }, [pendingCount]);
   
   const respond = async (id, status) => {
     try {
       await workerService.respondToRequest({ appointment_id: id, status });
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: status === 'accepted' ? 'Request accepted' : 'Request rejected' } }));
       fetchRequests();
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to update request');
+      const msg = e.response?.data?.error || 'Failed to update request';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
  

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { workerService } from '../services/api';
+import { workerService, apiEvents } from '../services/api';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { ChevronLeft, Bell, Moon, Volume2, Mail, Power } from 'lucide-react';
 
@@ -45,9 +45,11 @@ const DoctorSettings = () => {
     try {
       await workerService.updateStatus(worker.worker_id, value ? 'online' : 'offline');
       setMessage(value ? 'Status set to Online' : 'Status set to Offline');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: value ? 'You are now Online' : 'You are now Offline' } }));
       setTimeout(() => setMessage(''), 1200);
     } catch {
       setMessage('Failed to update status');
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Failed to update status' } }));
       setTimeout(() => setMessage(''), 1500);
     }
   };
@@ -58,6 +60,7 @@ const DoctorSettings = () => {
     setTimeout(() => {
       setSaving(false);
       setMessage('Settings saved');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Settings saved' } }));
       setTimeout(() => setMessage(''), 1200);
     }, 300);
   };

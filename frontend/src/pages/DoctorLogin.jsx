@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiEvents } from '../services/api';
 import { Stethoscope, Loader2, ChevronLeft, Mail } from 'lucide-react';
 
 const DoctorLogin = () => {
@@ -16,9 +17,11 @@ const DoctorLogin = () => {
     setLoading(true);
     try {
       await workerLogin(email);
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Woohoo! Login successful' } }));
       navigate('/doctor/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to login. Please check your email.');
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Login failed' } }));
     } finally {
       setLoading(false);
     }

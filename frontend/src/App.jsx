@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import Toast from './components/Toast';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -40,6 +41,7 @@ const App = () => {
   return (
     <div className="app">
       <Navbar />
+      <Toast />
       <div className="main-content">
         <Routes>
           <Route path="/" element={<Landing />} />

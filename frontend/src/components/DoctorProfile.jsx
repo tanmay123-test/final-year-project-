@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { apiEvents } from '../services/api';
 
 const DoctorProfile = () => {
     const [profile, setProfile] = useState(null);
@@ -65,6 +66,7 @@ const DoctorProfile = () => {
 
             if (response.data.success) {
                 setMessage('Consultation fee updated successfully!');
+                apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Consultation fee updated' } }));
                 // Update local profile
                 if (profile) {
                     setProfile({
@@ -75,6 +77,7 @@ const DoctorProfile = () => {
             }
         } catch (error) {
             setError(error.response?.data?.error || 'Failed to update consultation fee');
+            apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Failed to update consultation fee' } }));
         } finally {
             setSaving(false);
         }

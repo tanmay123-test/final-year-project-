@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doctorService, appointmentService } from '../services/api';
+import { doctorService, appointmentService, apiEvents } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   ChevronLeft, Calendar, Clock, Video, MapPin, 
@@ -128,10 +128,13 @@ const Booking = () => {
       }
       
       setSuccess('Appointment booked successfully!');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Booking sent' } }));
       setTimeout(() => navigate('/dashboard'), 2000);
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.error || 'Booking failed. Please try again.');
+      const msg = err.response?.data?.error || 'Booking failed. Please try again.';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setSubmitting(false);
     }

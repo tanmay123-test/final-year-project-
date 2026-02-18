@@ -6,7 +6,7 @@ import {
   User, CreditCard, Settings, HelpCircle, LogOut, 
   ChevronRight, Star, ShieldCheck, BadgeCheck
 } from 'lucide-react';
-import { doctorService, workerService } from '../services/api';
+import { doctorService, workerService, apiEvents } from '../services/api';
 
 const DoctorProfile = () => {
   const { worker, logout } = useAuth();
@@ -18,6 +18,7 @@ const DoctorProfile = () => {
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
       await logout();
+      apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'Logged out' } }));
       navigate('/worker/login');
     }
   };

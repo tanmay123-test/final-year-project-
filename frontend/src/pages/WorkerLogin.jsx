@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiEvents } from '../services/api';
 import { Stethoscope, Home, Package, Car, Wallet, Mail, Loader2, ChevronLeft } from 'lucide-react';
 
 const SERVICE_CONFIG = {
@@ -27,9 +28,12 @@ const WorkerLogin = ({ serviceType = 'healthcare' }) => {
     setLoading(true);
     try {
       await workerLogin(email);
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Woohoo! Login successful' } }));
       navigate('/worker/dashboard'); // Generic dashboard for now
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to login. Please check your email or approval status.');
+      const msg = err.response?.data?.error || 'Failed to login. Please check your email or approval status.';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Login failed' } }));
     } finally {
       setLoading(false);
     }

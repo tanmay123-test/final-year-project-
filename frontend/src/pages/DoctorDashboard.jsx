@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { workerService, doctorService } from '../services/api';
+import { workerService, doctorService, apiEvents } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { 
@@ -65,10 +65,12 @@ const DoctorDashboard = () => {
   const respond = async (appointmentId, status) => {
     try {
       await workerService.respondToRequest({ appointment_id: appointmentId, status });
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: status === 'accepted' ? 'Booking confirmed' : 'Booking rejected' } }));
       fetchAll();
     } catch (e) {
       console.error('Respond failed', e);
-      alert(e.response?.data?.error || 'Action failed');
+      const msg = e.response?.data?.error || 'Action failed';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
 

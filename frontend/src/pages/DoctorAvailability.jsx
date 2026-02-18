@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { workerService } from '../services/api';
+import { workerService, apiEvents } from '../services/api';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { 
   Calendar as CalendarIcon, Clock, Plus, Trash2, 
@@ -52,11 +52,14 @@ const DoctorAvailability = () => {
     try {
       await workerService.addAvailability(worker.worker_id, selectedDate, newTimeSlot);
       showMessage('success', 'Time slot added successfully');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: `Added ${newTimeSlot} on ${selectedDate}` } }));
       setNewTimeSlot('');
       fetchAvailability();
     } catch (error) {
       console.error('Error adding slot:', error);
-      showMessage('error', error.response?.data?.error || 'Failed to add time slot');
+      const msg = error.response?.data?.error || 'Failed to add time slot';
+      showMessage('error', msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setAdding(false);
     }
@@ -68,10 +71,13 @@ const DoctorAvailability = () => {
     try {
       await workerService.removeAvailability(worker.worker_id, selectedDate, timeSlot);
       showMessage('success', 'Time slot removed');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: `Removed ${timeSlot}` } }));
       fetchAvailability();
     } catch (error) {
       console.error('Error removing slot:', error);
-      showMessage('error', 'Failed to remove time slot');
+      const msg = 'Failed to remove time slot';
+      showMessage('error', msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
 
