@@ -27,6 +27,10 @@ from notification_service import notify_user, notify_doctor
 from payment_service import payment_service
 from config import USER_DB
 
+# Import car service system
+from car_service_db import car_service_db
+from dispatch_db import dispatch_db
+
 # Import subscription system
 from subscription.subscription_service import subscription_service
 from subscription.subscription_routes import subscription_bp
@@ -1016,6 +1020,343 @@ def get_doctor_profile():
         return jsonify(profile), 200
     else:
         return jsonify({"error": "Profile not found"}), 404
+
+# ================= CAR SERVICE =================
+@app.route("/car/mechanics")
+def get_car_mechanics():
+    """Get all available car mechanics"""
+    try:
+        mechanics = car_service_db.get_mechanics()
+        return jsonify({"mechanics": mechanics}), 200
+    except Exception as e:
+        print(f"❌ Error fetching mechanics: {e}")
+        return jsonify({"error": "Failed to fetch mechanics", "mechanics": []}), 500
+
+@app.route("/car/mechanics/<int:mechanic_id>")
+def get_car_mechanic_details(mechanic_id):
+    """Get specific mechanic details"""
+    try:
+        mechanic = car_service_db.get_mechanic_by_id(mechanic_id)
+        if mechanic:
+            return jsonify(mechanic), 200
+        else:
+            return jsonify({"error": "Mechanic not found"}), 404
+    except Exception as e:
+        print(f"❌ Error fetching mechanic details: {e}")
+        return jsonify({"error": "Failed to fetch mechanic details"}), 500
+
+@app.route("/car/services")
+def get_car_services():
+    """Get all available car services"""
+    try:
+        services = car_service_db.get_car_services()
+        return jsonify({"services": services}), 200
+    except Exception as e:
+        print(f"❌ Error fetching car services: {e}")
+        return jsonify({"error": "Failed to fetch car services", "services": []}), 500
+
+@app.route("/car/book", methods=["POST"])
+def book_car_service():
+    """Book a car service appointment"""
+    try:
+        data = request.json
+        required_fields = ['user_id', 'mechanic_id', 'user_name', 'user_email', 
+                          'user_phone', 'car_model', 'car_issue', 'service_type', 
+                          'booking_date', 'time_slot']
+        
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Get mechanic consultation fee
+        mechanic = car_service_db.get_mechanic_by_id(data['mechanic_id'])
+        if not mechanic:
+            return jsonify({"error": "Mechanic not found"}), 404
+        
+        consultation_fee = mechanic.get('consultation_fee', 400)
+        
+        appointment_id = car_service_db.book_appointment(
+            data['user_id'], data['mechanic_id'], data['user_name'],
+            data['user_email'], data['user_phone'], data['car_model'],
+            data['car_issue'], data['service_type'], data['booking_date'],
+            data['time_slot'], consultation_fee
+        )
+        
+        print(f"🔧 Car service booked: Appointment {appointment_id} for user {data['user_name']}")
+        return jsonify({
+            "success": True,
+            "appointment_id": appointment_id,
+            "message": "Car service appointment booked successfully"
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ Error booking car service: {e}")
+        return jsonify({"error": "Failed to book car service"}), 500
+
+@app.route("/car/mechanic/login", methods=["POST"])
+def car_mechanic_login():
+    """Car mechanic login"""
+    try:
+        data = request.json
+        email = data.get("email")
+        password = data.get("password")
+        
+        if not email or not password:
+            return jsonify({"error": "Email and password required"}), 400
+        
+        mechanic = car_service_db.verify_mechanic_login(email, password)
+        if mechanic:
+            token = generate_token(email)
+            return jsonify({
+                "success": True,
+                "token": token,
+                "mechanic": mechanic
+            }), 200
+        else:
+            return jsonify({"error": "Invalid email or password"}), 401
+            
+    except Exception as e:
+        print(f"❌ Error in mechanic login: {e}")
+        return jsonify({"error": "Login failed"}), 500
+
+@app.route("/car/mechanic/signup", methods=["POST"])
+def car_mechanic_signup():
+    """Register a new car mechanic"""
+    try:
+        data = request.json
+        required_fields = ['name', 'email', 'phone', 'specialization', 'experience', 'service_center', 'location']
+        
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        mechanic_id = car_service_db.register_mechanic(
+            data['name'], data['email'], data['phone'], data['specialization'],
+            data['experience'], data['service_center'], data['location'],
+            data.get('consultation_fee', 400), data.get('password', 'mechanic123')
+        )
+        
+        print(f"🔧 Car mechanic registered: {data['name']} (ID: {mechanic_id})")
+        return jsonify({
+            "success": True,
+            "mechanic_id": mechanic_id,
+            "message": "Mechanic registration successful. Please wait for approval."
+        }), 201
+        
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Email already exists"}), 409
+    except Exception as e:
+        print(f"❌ Error in mechanic signup: {e}")
+        return jsonify({"error": "Registration failed"}), 500
+
+@app.route("/car/mechanic/appointments")
+def get_mechanic_appointments():
+    """Get appointments for a mechanic (authentication required)"""
+    auth = require_auth()
+    if not auth:
+        return jsonify({"error": "Authentication required"}), 401
+    
+    try:
+        # Get mechanic ID from email
+        mechanic_email = auth['email']
+        mechanic = None
+        
+        # Find mechanic by email
+        mechanics = car_service_db.get_mechanics()
+        for m in mechanics:
+            if m['email'] == mechanic_email:
+                mechanic = m
+                break
+        
+        if not mechanic:
+            return jsonify({"error": "Mechanic not found"}), 404
+        
+        appointments = car_service_db.get_mechanic_appointments(mechanic['id'])
+        return jsonify({"appointments": appointments}), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching mechanic appointments: {e}")
+        return jsonify({"error": "Failed to fetch appointments"}), 500
+
+# ================= DISPATCH SYSTEM =================
+@app.route("/dispatch/job", methods=["POST"])
+def create_dispatch_job():
+    """Create a new dispatch job for roadside assistance"""
+    try:
+        data = request.json
+        required_fields = ['user_id', 'issue', 'latitude', 'longitude', 'address']
+        
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        job_id = dispatch_db.create_job(
+            data['user_id'], data['issue'], data['latitude'], 
+            data['longitude'], data['address'], 
+            data.get('service_type', 'MECHANIC'), data.get('urgency', 0)
+        )
+        
+        # Find nearby mechanics
+        nearby_mechanics = dispatch_db.find_nearby_mechanics(
+            data['latitude'], data['longitude'], 
+            data.get('radius', 10.0), data.get('specialization')
+        )
+        
+        if nearby_mechanics:
+            # Offer job to top 3 nearest mechanics
+            selected_mechanics = nearby_mechanics[:3]
+            offer_ids = dispatch_db.offer_job_to_mechanics(job_id, selected_mechanics)
+            
+            print(f"🚗 Dispatch job {job_id} created and offered to {len(offer_ids)} mechanics")
+            return jsonify({
+                "success": True,
+                "job_id": job_id,
+                "mechanics_offered": len(offer_ids),
+                "estimated_arrival": f"{selected_mechanics[0]['distance_km']:.1f} km away"
+            }), 201
+        else:
+            return jsonify({
+                "success": True,
+                "job_id": job_id,
+                "mechanics_offered": 0,
+                "message": "No nearby mechanics available. Please try again later."
+            }), 201
+        
+    except Exception as e:
+        print(f"❌ Error creating dispatch job: {e}")
+        return jsonify({"error": "Failed to create dispatch job"}), 500
+
+@app.route("/dispatch/job/<job_id>")
+def get_dispatch_job(job_id):
+    """Get dispatch job details"""
+    try:
+        job = dispatch_db.get_job_details(job_id)
+        if job:
+            return jsonify(job), 200
+        else:
+            return jsonify({"error": "Job not found"}), 404
+    except Exception as e:
+        print(f"❌ Error fetching dispatch job: {e}")
+        return jsonify({"error": "Failed to fetch job details"}), 500
+
+@app.route("/dispatch/offer/<offer_id>/accept", methods=["POST"])
+def accept_dispatch_offer(offer_id):
+    """Accept a dispatch job offer"""
+    try:
+        data = request.json
+        mechanic_id = data.get('mechanic_id')
+        
+        if not mechanic_id:
+            return jsonify({"error": "Mechanic ID required"}), 400
+        
+        success = dispatch_db.accept_job_offer(offer_id, mechanic_id)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Job offer accepted successfully"
+            }), 200
+        else:
+            return jsonify({"error": "Failed to accept job offer"}), 400
+            
+    except Exception as e:
+        print(f"❌ Error accepting dispatch offer: {e}")
+        return jsonify({"error": "Failed to accept offer"}), 500
+
+@app.route("/dispatch/job/<job_id>/status", methods=["PUT"])
+def update_dispatch_job_status(job_id):
+    """Update dispatch job status"""
+    try:
+        data = request.json
+        status = data.get('status')
+        mechanic_id = data.get('mechanic_id')
+        
+        if not status:
+            return jsonify({"error": "Status required"}), 400
+        
+        valid_statuses = ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']
+        if status not in valid_statuses:
+            return jsonify({"error": f"Invalid status. Must be one of: {valid_statuses}"}), 400
+        
+        success = dispatch_db.update_job_status(job_id, status, mechanic_id)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Job status updated to {status}"
+            }), 200
+        else:
+            return jsonify({"error": "Failed to update job status"}), 400
+            
+    except Exception as e:
+        print(f"❌ Error updating dispatch job status: {e}")
+        return jsonify({"error": "Failed to update job status"}), 500
+
+@app.route("/dispatch/mechanics/nearby")
+def get_nearby_mechanics():
+    """Get nearby mechanics for dispatch"""
+    try:
+        latitude = float(request.args.get('latitude'))
+        longitude = float(request.args.get('longitude'))
+        radius = float(request.args.get('radius', 10.0))
+        specialization = request.args.get('specialization')
+        
+        mechanics = dispatch_db.find_nearby_mechanics(latitude, longitude, radius, specialization)
+        return jsonify({"mechanics": mechanics}), 200
+        
+    except (ValueError, TypeError):
+        return jsonify({"error": "Valid latitude and longitude required"}), 400
+    except Exception as e:
+        print(f"❌ Error finding nearby mechanics: {e}")
+        return jsonify({"error": "Failed to find nearby mechanics"}), 500
+
+@app.route("/dispatch/mechanic/<int:mechanic_id>/location", methods=["PUT"])
+def update_mechanic_location(mechanic_id):
+    """Update mechanic real-time location"""
+    try:
+        data = request.json
+        latitude = float(data.get('latitude'))
+        longitude = float(data.get('longitude'))
+        address = data.get('address', '')
+        
+        success = dispatch_db.update_mechanic_location(mechanic_id, latitude, longitude, address)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Location updated successfully"
+            }), 200
+        else:
+            return jsonify({"error": "Failed to update location"}), 400
+            
+    except (ValueError, TypeError):
+        return jsonify({"error": "Valid latitude and longitude required"}), 400
+    except Exception as e:
+        print(f"❌ Error updating mechanic location: {e}")
+        return jsonify({"error": "Failed to update location"}), 500
+
+@app.route("/dispatch/mechanic/<int:mechanic_id>/jobs")
+def get_mechanic_dispatch_jobs(mechanic_id):
+    """Get dispatch jobs for a mechanic"""
+    try:
+        status = request.args.get('status')
+        jobs = dispatch_db.get_mechanic_jobs(mechanic_id, status)
+        return jsonify({"jobs": jobs}), 200
+        
+    except Exception as e:
+        print(f"❌ Error fetching mechanic jobs: {e}")
+        return jsonify({"error": "Failed to fetch jobs"}), 500
+
+@app.route("/dispatch/mechanic/<int:mechanic_id>/wallet")
+def get_mechanic_wallet(mechanic_id):
+    """Get mechanic wallet information"""
+    try:
+        wallet = dispatch_db.get_mechanic_wallet(mechanic_id)
+        if wallet:
+            return jsonify(wallet), 200
+        else:
+            return jsonify({"error": "Wallet not found"}), 404
+            
+    except Exception as e:
+        print(f"❌ Error fetching mechanic wallet: {e}")
+        return jsonify({"error": "Failed to fetch wallet information"}), 500
 
 # ================= RUN =================
 if __name__ == "__main__":
