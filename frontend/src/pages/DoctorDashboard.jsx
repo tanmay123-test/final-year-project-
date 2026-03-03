@@ -1,55 +1,78 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { workerService, doctorService, apiEvents } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { 
   Users, Clock, Calendar, TrendingUp, 
-  Power, ChevronRight, Video, User
+  Power, ChevronRight, Video, User, CheckCircle2, XCircle
 } from 'lucide-react';
 
 const DoctorDashboard = () => {
   const { worker, logout } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
+  const [doctorName, setDoctorName] = useState('');
+  const [stats, setStats] = useState([
+    { icon: Users, value: '0', label: "Today's Patients" },
+    { icon: Clock, value: '0', label: "Pending Requests" },
+    { icon: Calendar, value: '0', label: "Accepted" },
+    { icon: TrendingUp, value: '0', label: "Total" },
+  ]);
+  const [appointments, setAppointments] = useState([]);
+  const navigate = useNavigate();
 
-  // Mock Data
-  const stats = [
-    { icon: Users, value: '5', label: "Today's Patients" },
-    { icon: Clock, value: '3', label: "Pending Requests" },
-    { icon: Calendar, value: '24', label: "This Week" },
-    { icon: TrendingUp, value: '₹12.5K', label: "Revenue" },
-  ];
+  const fetchAll = async () => {
+    if (!worker?.worker_id) return;
+    try {
+      const w = await doctorService.getDoctorById(worker.worker_id);
+      const fullName = w.data.worker?.full_name || (worker.email?.split('@')[0] || 'Doctor');
+      setDoctorName(fullName);
+      const ap = await workerService.getAppointments(worker.worker_id);
+      const list = ap.data.appointments || [];
+      const mapped = list.map((a) => ({
+        id: a.id,
+        name: a.user_name || 'Patient',
+        type: a.appointment_type === 'video' ? 'Video Call' : 'In-Person',
+        symptom: a.patient_symptoms || '',
+        time: a.time_slot || (a.booking_date ? (String(a.booking_date).split(' ')[1] || '') : ''),
+        status: a.status || '',
+        initial: (a.user_name || 'P').charAt(0).toUpperCase(),
+        color: '#E8DAEF',
+      }));
+      setAppointments(mapped);
 
-  const appointments = [
-    {
-      id: 1,
-      name: 'John Doe',
-      type: 'Video Call',
-      symptom: 'Chest pain and shortness of breath',
-      time: '10:00 AM',
-      status: 'Upcoming',
-      initial: 'J',
-      color: '#E8DAEF' // Light purple background for avatar
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      type: 'In-Person',
-      symptom: 'Regular checkup',
-      time: '11:30 AM',
-      status: 'Upcoming',
-      initial: 'J',
-      color: '#E8DAEF'
-    },
-    {
-      id: 3,
-      name: 'Mike Johnson',
-      type: 'Video Call',
-      symptom: 'High blood pressure concerns',
-      time: '2:00 PM',
-      status: 'Upcoming',
-      initial: 'M',
-      color: '#E8DAEF'
+      const today = new Date().toISOString().slice(0, 10);
+      const isToday = (bd) => (bd ? String(bd).startsWith(today) : false);
+      const todayPatients = list.filter((a) => isToday(a.booking_date) && a.status !== 'completed').length;
+      const pendingCount = list.filter((a) => a.status === 'pending').length;
+      const acceptedCount = list.filter((a) => a.status === 'accepted').length;
+      const totalCount = list.length;
+      setStats([
+        { icon: Users, value: String(todayPatients), label: "Today's Patients" },
+        { icon: Clock, value: String(pendingCount), label: "Pending Requests" },
+        { icon: Calendar, value: String(acceptedCount), label: "Accepted" },
+        { icon: TrendingUp, value: String(totalCount), label: "Total" },
+      ]);
+    } catch (e) {
+      console.error(e);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchAll();
+  }, [worker]);
+
+  const respond = async (appointmentId, status) => {
+    try {
+      await workerService.respondToRequest({ appointment_id: appointmentId, status });
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: status === 'accepted' ? 'Booking confirmed' : 'Booking rejected' } }));
+      fetchAll();
+    } catch (e) {
+      console.error('Respond failed', e);
+      const msg = e.response?.data?.error || 'Action failed';
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
+    }
+  };
 
   return (
     <div className="doctor-dashboard-container">
@@ -58,7 +81,7 @@ const DoctorDashboard = () => {
         <div className="header-content">
           <div className="doctor-info">
             <span className="greeting">Good Morning 👋</span>
-            <h1 className="doctor-name">Dr. {worker?.name || 'Sarah Johnson'}</h1>
+            <h1 className="doctor-name">Dr. {doctorName}</h1>
           </div>
           <div className="header-actions">
             <button 
@@ -70,7 +93,7 @@ const DoctorDashboard = () => {
               <span className="status-dot"></span>
             </button>
             <div className="profile-avatar">
-              {worker?.name ? worker.name[0] : 'S'}
+              {(doctorName || 'S')[0]}
             </div>
           </div>
         </div>
@@ -95,7 +118,7 @@ const DoctorDashboard = () => {
       <div className="schedule-section">
         <div className="section-header">
           <h2>Today's Schedule</h2>
-          <button className="view-all-btn">
+          <button className="view-all-btn" onClick={() => navigate('/doctor/requests')}>
             View All <ChevronRight size={16} />
           </button>
         </div>
@@ -118,6 +141,16 @@ const DoctorDashboard = () => {
                 <span className="apt-time">{apt.time}</span>
                 <span className="apt-status">{apt.status}</span>
               </div>
+              {apt.status === 'pending' && (
+                <div className="apt-actions">
+                  <button className="btn-accept" onClick={() => respond(apt.id, 'accepted')}>
+                    <CheckCircle2 size={16} /> Accept
+                  </button>
+                  <button className="btn-reject" onClick={() => respond(apt.id, 'rejected')}>
+                    <XCircle size={16} /> Reject
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -291,6 +324,7 @@ const DoctorDashboard = () => {
           align-items: center;
           gap: 1rem;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+          position: relative;
         }
 
         .apt-avatar {
@@ -356,6 +390,31 @@ const DoctorDashboard = () => {
           padding: 0.25rem 0.5rem;
           border-radius: 12px;
           font-weight: 600;
+        }
+        .apt-actions {
+          display: flex;
+          gap: 0.5rem;
+          margin-left: auto;
+        }
+        .btn-accept, .btn-reject {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          border: 1px solid #E0E0E0;
+          background: #F5F7FA;
+          color: var(--text-primary);
+          padding: 0.4rem 0.6rem;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: 600;
+        }
+        .btn-accept {
+          border-color: #2ECC71;
+          color: #2ECC71;
+        }
+        .btn-reject {
+          border-color: #C0392B;
+          color: #C0392B;
         }
 
         @media (min-width: 768px) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import DoctorBottomNav from '../components/DoctorBottomNav';
@@ -6,25 +6,37 @@ import {
   User, CreditCard, Settings, HelpCircle, LogOut, 
   ChevronRight, Star, ShieldCheck, BadgeCheck
 } from 'lucide-react';
+import { doctorService, workerService, apiEvents } from '../services/api';
 
 const DoctorProfile = () => {
   const { worker, logout } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [doc, setDoc] = useState(null);
+  const [patientsCount, setPatientsCount] = useState(0);
 
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
       await logout();
+      apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'Logged out' } }));
       navigate('/worker/login');
     }
   };
 
-  // Mock data for stats - in a real app these would come from an API
-  const stats = {
-    patients: 156,
-    experience: '12 years',
-    earnings: '₹45K'
-  };
+  useEffect(() => {
+    const load = async () => {
+      if (!worker?.worker_id) return;
+      try {
+        const res = await doctorService.getDoctorById(worker.worker_id);
+        setDoc(res.data.worker || {});
+        const hist = await workerService.getHistory(worker.worker_id);
+        setPatientsCount((hist.data.history || []).length);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+  }, [worker]);
 
   const menuItems = [
     { icon: User, label: 'View Full Details', path: '/doctor/profile/details' },
@@ -45,17 +57,19 @@ const DoctorProfile = () => {
         {/* Profile Card */}
         <div className="profile-card">
           <div className="profile-avatar-large">
-            {worker?.name ? worker.name[0].toUpperCase() : 'D'}
+            {(doc?.full_name || (worker?.email || localStorage.getItem('worker_email') || 'D'))[0].toUpperCase()}
           </div>
           <div className="profile-info">
             <div className="name-row">
-              <h2 className="doctor-name">Dr. {worker?.name || 'Sarah Johnson'}</h2>
+              <h2 className="doctor-name">
+                Dr. {doc?.full_name || (worker?.email ? worker.email.split('@')[0] : (localStorage.getItem('worker_email') || 'Doctor').split('@')[0])}
+              </h2>
               <BadgeCheck size={20} className="verified-badge" fill="#8E44AD" color="white" />
             </div>
-            <p className="specialization">{worker?.specialization || 'Cardiologist'}</p>
+            <p className="specialization">{doc?.specialization || worker?.specialization || ''}</p>
             <div className="rating-row">
               <Star size={16} fill="#8E44AD" color="#8E44AD" />
-              <span className="rating-value">4.9</span>
+              <span className="rating-value">{doc?.rating || '4.9'}</span>
             </div>
           </div>
         </div>
@@ -69,7 +83,7 @@ const DoctorProfile = () => {
               <span className="status-icon id-icon">ID</span>
               <span>Worker ID</span>
             </div>
-            <span className="status-value">{worker?.worker_id ? `DOC${String(worker.worker_id).padStart(3, '0')}` : 'DOC001'}</span>
+            <span className="status-value">{worker?.worker_id ? `DOC${String(worker.worker_id).padStart(3, '0')}` : ''}</span>
           </div>
           <div className="status-divider"></div>
           <div className="status-row">
@@ -77,8 +91,8 @@ const DoctorProfile = () => {
               <ShieldCheck size={16} className="status-icon verify-icon" />
               <span>Verification</span>
             </div>
-            <span className="status-value verified">
-              <span className="check-box">✓</span> Approved
+            <span className={`status-value ${doc?.status === 'approved' ? 'verified' : ''}`}>
+              {doc?.status === 'approved' ? (<><span className="check-box">✓</span> Approved</>) : (String(doc?.status || 'Pending').charAt(0).toUpperCase() + String(doc?.status || 'pending').slice(1))}
             </span>
           </div>
         </div>
@@ -86,15 +100,15 @@ const DoctorProfile = () => {
         {/* Stats Grid */}
         <div className="stats-row">
           <div className="stat-box">
-            <span className="stat-number">{stats.patients}</span>
+            <span className="stat-number">{patientsCount}</span>
             <span className="stat-label">Patients</span>
           </div>
           <div className="stat-box">
-            <span className="stat-number">{stats.experience}</span>
+            <span className="stat-number">{doc?.experience ? `${doc.experience} years` : '—'}</span>
             <span className="stat-label">Experience</span>
           </div>
           <div className="stat-box">
-            <span className="stat-number">{stats.earnings}</span>
+            <span className="stat-number">{doc?.consultation_fee ? `₹${doc.consultation_fee}` : '₹—'}</span>
             <span className="stat-label">Earnings</span>
           </div>
         </div>

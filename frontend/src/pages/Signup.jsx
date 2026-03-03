@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { authService } from '../services/api';
+import { authService, apiEvents } from '../services/api';
 import { User, AtSign, Mail, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
 
 const Signup = () => {
@@ -27,9 +27,12 @@ const Signup = () => {
     setIsLoading(true);
     try {
       await authService.signup(formData);
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Signup successful. Verify your email' } }));
       navigate('/verify-email', { state: { email: formData.email } });
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to sign up');
+      const msg = err.response?.data?.error || 'Failed to sign up';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setIsLoading(false);
     }
@@ -41,9 +44,12 @@ const Signup = () => {
     setIsLoading(true);
     try {
       await authService.verifyOtp({ email: formData.email, otp });
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Email verified' } }));
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.error || 'Invalid OTP');
+      const msg = err.response?.data?.error || 'Invalid OTP';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setIsLoading(false);
     }

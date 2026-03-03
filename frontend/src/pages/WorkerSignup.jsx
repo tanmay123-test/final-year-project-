@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { doctorService, workerService } from '../services/api';
+import { doctorService, workerService, apiEvents } from '../services/api';
 import { Stethoscope, Home, Package, Car, Wallet, User, Mail, Phone, MapPin, Briefcase, Loader2, ChevronLeft, BadgeCheck, Lock } from 'lucide-react';
 
 const SERVICE_CONFIG = {
@@ -65,9 +65,12 @@ const WorkerSignup = ({ serviceType = 'healthcare' }) => {
         response = await workerService.register(payload);
       }
       setSuccess(`Registration successful! Your ID is ${response.data.worker_id}.`);
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Woohoo! Signup successful' } }));
       setTimeout(() => navigate(`/worker/${serviceType}/login`), 2000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to register');
+      const msg = err.response?.data?.error || 'Failed to register';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setLoading(false);
     }

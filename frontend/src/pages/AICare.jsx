@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { aiService, doctorService } from '../services/api';
+import { aiService, doctorService, apiEvents } from '../services/api';
 import BottomNav from '../components/BottomNav';
 import { Bot, HelpCircle, Stethoscope, AlertCircle, CheckCircle2, ChevronLeft, Volume2, Square } from 'lucide-react';
 
@@ -178,6 +178,7 @@ const AICare = () => {
         const reply = data.question || 'Please provide more details.';
         addMessage('assistant', reply);
         speakResult({ message: reply });
+        apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'More details needed' } }));
       } else if (s === 'final' || s === 'emergency') {
         setResult(data);
         setQuestion('');
@@ -186,11 +187,14 @@ const AICare = () => {
         speakResult(data);
         const reply = buildSpeechText(data);
         addMessage('assistant', reply);
+        apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Care plan ready' } }));
       } else {
         setResult(null);
       }
     } catch (e) {
-      setError(e.response?.data?.error || 'Something went wrong');
+      const msg = e.response?.data?.error || 'Something went wrong';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setLoading(false);
       setSymptoms('');

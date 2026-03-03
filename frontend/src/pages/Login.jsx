@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AtSign, Lock, Eye, EyeOff, Plus } from 'lucide-react';
+import { apiEvents } from '../services/api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -23,16 +24,38 @@ const Login = () => {
     // Simple client-side logging
     console.info(`[Auth] Login attempt started for user: ${username} at ${new Date().toISOString()}`);
 
+    const fingerprint = `${navigator.userAgent}|${navigator.platform}|${navigator.language}|${new Date().getTimezoneOffset()}`;
     try {
       await login(username, password);
       console.info(`[Auth] Login successful for user: ${username}`);
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Woohoo! Login successful' } }));
+      const key = `device_fp_${username}`;
+      const prev = localStorage.getItem(key);
+      if (prev && prev !== fingerprint) {
+        apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'New device login detected' } }));
+      }
+      localStorage.setItem(key, fingerprint);
+      localStorage.removeItem(`fail_count_${username}`);
       navigate(from, { replace: true });
     } catch (err) {
       console.error(`[Auth] Login failed for user: ${username}`, err);
-      setError(err.response?.data?.error || 'Failed to login. Please check your credentials.');
+      const msg = err.response?.data?.error || 'Failed to login. Please check your credentials.';
+      setError(msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Login failed' } }));
+      const k = `fail_count_${username}`;
+      const c = parseInt(localStorage.getItem(k) || '0', 10) + 1;
+      localStorage.setItem(k, String(c));
+      if (c >= 3) {
+        apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Suspicious activity: multiple failed logins' } }));
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleForgot = (e) => {
+    e.preventDefault();
+    apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'Password reset link sent to your email' } }));
   };
 
   return (
@@ -87,7 +110,7 @@ const Login = () => {
             </div>
           </div>
 
-          <Link to="#" className="forgot-password">Forgot Password?</Link>
+          <Link to="#" className="forgot-password" onClick={handleForgot}>Forgot Password?</Link>
 
           <button type="submit" className="btn-primary" disabled={isLoading}>
             {isLoading ? 'Logging in...' : 'Login'}

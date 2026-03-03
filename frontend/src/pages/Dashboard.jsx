@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { appointmentService, videoService } from '../services/api';
+import { appointmentService, videoService, apiEvents } from '../services/api';
 import { Link } from 'react-router-dom';
 import { CalendarDays, Stethoscope, Video, Clock, X, MessageCircle } from 'lucide-react';
 
@@ -16,6 +16,10 @@ const Dashboard = () => {
       try {
         const response = await appointmentService.getUserAppointments();
         setAppointments(response.data.appointments);
+        const upcomingCount = (response.data.appointments || []).filter(a => !['completed','cancelled','rejected'].includes((a.status || '').toLowerCase())).length;
+        if (upcomingCount > 0) {
+          apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: `You have ${upcomingCount} upcoming appointment(s)` } }));
+        }
       } catch (error) {
         console.error('Failed to fetch appointments:', error);
       } finally {
@@ -42,12 +46,13 @@ const Dashboard = () => {
       const res = await videoService.getVideoLink(id);
       const link = res.data?.meeting_link;
       if (link) {
+        apiEvents.dispatchEvent(new CustomEvent('toast:info', { detail: { message: 'Joining video...' } }));
         window.open(link, '_blank', 'noopener,noreferrer');
       } else {
-        alert('Meeting link not ready yet. Please wait for the doctor to start.');
+        apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Meeting link not ready yet' } }));
       }
     } catch (e) {
-      alert('Could not get meeting link.');
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Could not get meeting link' } }));
     } finally {
       setActionLoadingId(null);
     }
@@ -60,8 +65,9 @@ const Dashboard = () => {
       setActionLoadingId(id);
       await appointmentService.cancelAppointment(id);
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelled' } : a));
+       apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: 'Appointment cancelled' } }));
     } catch (e) {
-      alert('Cancel failed. This action may not be available.');
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: 'Cancel failed' } }));
     } finally {
       setActionLoadingId(null);
     }

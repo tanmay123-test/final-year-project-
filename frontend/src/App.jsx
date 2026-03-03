@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import Toast from './components/Toast';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -15,7 +16,11 @@ import ServiceSelection from './pages/ServiceSelection';
 import DoctorLogin from './pages/DoctorLogin';
 import DoctorDashboard from './pages/DoctorDashboard';
 import DoctorAvailability from './pages/DoctorAvailability';
+import DoctorRequests from './pages/DoctorRequests';
 import DoctorProfile from './pages/DoctorProfile';
+import DoctorProfileDetails from './pages/DoctorProfileDetails';
+import DoctorSettings from './pages/DoctorSettings';
+import DoctorAppointments from './pages/DoctorAppointments';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AICare from './pages/AICare';
@@ -36,6 +41,7 @@ const App = () => {
   return (
     <div className="app">
       <Navbar />
+      <Toast />
       <div className="main-content">
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -80,10 +86,42 @@ const App = () => {
             } 
           />
           <Route 
+            path="/doctor/requests" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorRequests />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
             path="/doctor/profile" 
             element={
               <ProtectedWorkerRoute>
                 <DoctorProfile />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/profile/details" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorProfileDetails />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/settings" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorSettings />
+              </ProtectedWorkerRoute>
+            } 
+          />
+          <Route 
+            path="/doctor/appointments" 
+            element={
+              <ProtectedWorkerRoute>
+                <DoctorAppointments />
               </ProtectedWorkerRoute>
             } 
           />

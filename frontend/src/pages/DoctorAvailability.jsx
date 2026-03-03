@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { workerService } from '../services/api';
+import { workerService, apiEvents } from '../services/api';
 import DoctorBottomNav from '../components/DoctorBottomNav';
 import { 
   Calendar as CalendarIcon, Clock, Plus, Trash2, 
@@ -16,6 +16,9 @@ const DoctorAvailability = () => {
   const [adding, setAdding] = useState(false);
   const [newTimeSlot, setNewTimeSlot] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
+  const todayStr = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   useEffect(() => {
     if (worker?.worker_id) {
@@ -40,16 +43,23 @@ const DoctorAvailability = () => {
   const handleAddSlot = async (e) => {
     e.preventDefault();
     if (!newTimeSlot) return;
+    if (isPastForSelectedDate(newTimeSlot)) {
+      showMessage('error', 'Cannot add a time slot that has already passed');
+      return;
+    }
 
     setAdding(true);
     try {
       await workerService.addAvailability(worker.worker_id, selectedDate, newTimeSlot);
       showMessage('success', 'Time slot added successfully');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: `Added ${newTimeSlot} on ${selectedDate}` } }));
       setNewTimeSlot('');
       fetchAvailability();
     } catch (error) {
       console.error('Error adding slot:', error);
-      showMessage('error', error.response?.data?.error || 'Failed to add time slot');
+      const msg = error.response?.data?.error || 'Failed to add time slot';
+      showMessage('error', msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     } finally {
       setAdding(false);
     }
@@ -61,10 +71,13 @@ const DoctorAvailability = () => {
     try {
       await workerService.removeAvailability(worker.worker_id, selectedDate, timeSlot);
       showMessage('success', 'Time slot removed');
+      apiEvents.dispatchEvent(new CustomEvent('api:success', { detail: { message: `Removed ${timeSlot}` } }));
       fetchAvailability();
     } catch (error) {
       console.error('Error removing slot:', error);
-      showMessage('error', 'Failed to remove time slot');
+      const msg = 'Failed to remove time slot';
+      showMessage('error', msg);
+      apiEvents.dispatchEvent(new CustomEvent('api:error', { detail: { message: msg } }));
     }
   };
 
@@ -81,6 +94,17 @@ const DoctorAvailability = () => {
     timeOptions.push(`${hour}:00 ${ampm}`);
     timeOptions.push(`${hour}:30 ${ampm}`);
   }
+  const toMinutes = (time) => {
+    const [hm, ap] = time.split(' ');
+    const [h, m] = hm.split(':').map(Number);
+    let hour24 = h % 12;
+    if (ap === 'PM') hour24 += 12;
+    return hour24 * 60 + m;
+  };
+  const isPastForSelectedDate = (time) => {
+    if (selectedDate !== todayStr) return false;
+    return toMinutes(time) <= nowMinutes;
+  };
 
   return (
     <div className="availability-page">
@@ -145,9 +169,17 @@ const DoctorAvailability = () => {
                 <option 
                   key={time} 
                   value={time}
-                  disabled={availability.some(s => s.time_slot === time)}
+                  disabled={
+                    availability.some(s => s.time_slot === time) ||
+                    isPastForSelectedDate(time)
+                  }
                 >
-                  {time} {availability.some(s => s.time_slot === time) ? '(Added)' : ''}
+                  {time} 
+                  {availability.some(s => s.time_slot === time) 
+                    ? '(Added)' 
+                    : isPastForSelectedDate(time) 
+                      ? '(Past)' 
+                      : ''}
                 </option>
               ))}
             </select>

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Database
+*.db
+
+# Uploads
+uploads/
+car_service/uploads/
+
+# Virtual env
+venv/
+.env

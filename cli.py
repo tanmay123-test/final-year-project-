@@ -121,7 +121,11 @@ def service_selection():
         elif choice == "3":
             print("🚧 Resource Management service coming soon!")
         elif choice == "4":
+<<<<<<< HEAD
             open_car_service()
+=======
+            car_service_menu()
+>>>>>>> 4b21f58c1472ac493956a811d9ce823e1b39dfab
         elif choice == "5":
             print("🚧 Money Management coming soon!")
         elif choice == "6":
@@ -4244,6 +4248,523 @@ def video_menu_user(user_id):
             input("\nPress Enter...")
         elif choice == "3":
             break
+
+
+def car_service_menu():
+    """Car Service User Menu"""
+    print("\n🚗 Car Service Portal")
+    
+    while True:
+        print("\n--- CAR SERVICE MENU ---")
+        print("1. 🔧 Find Mechanics")
+        print("2. 📋 View Services")
+        print("3. 📅 Book Appointment")
+        print("4. 🚨 Roadside Assistance")
+        print("5. 📊 My Bookings")
+        print("6. ⬅️ Back")
+        
+        choice = input("Choice: ").strip()
+        
+        if choice == "1":
+            find_mechanics_cli()
+        elif choice == "2":
+            view_car_services_cli()
+        elif choice == "3":
+            book_car_service_cli()
+        elif choice == "4":
+            roadside_assistance_cli()
+        elif choice == "5":
+            view_my_bookings_cli()
+        elif choice == "6":
+            break
+        else:
+            print("❌ Invalid choice")
+
+
+def car_service_worker_menu():
+    """Car Service Worker Portal"""
+    print("\n🔧 Car Service Worker Portal")
+    
+    while True:
+        print("\n--- CAR SERVICE WORKER MENU ---")
+        print("1. Mechanic Signup")
+        print("2. Mechanic Login")
+        print("3. ⬅️ Back")
+        
+        c = input("Choice: ").strip()
+        
+        if c == "1":
+            car_mechanic_signup_cli()
+        elif c == "2":
+            car_mechanic_login_cli()
+        elif c == "3":
+            return
+
+
+def find_mechanics_cli():
+    """Find and display available mechanics"""
+    print("\n🔧 FINDING MECHANICS")
+    print("="*40)
+    
+    try:
+        r = requests.get(f"{API}/car/mechanics")
+        if r.status_code == 200:
+            data = r.json()
+            mechanics = data.get('mechanics', [])
+            
+            if not mechanics:
+                print("❌ No mechanics available at the moment.")
+                return
+            
+            print(f"📋 Found {len(mechanics)} mechanics:")
+            print("-"*60)
+            
+            for i, mech in enumerate(mechanics, 1):
+                print(f"{i}. 🔧 {mech['name']}")
+                print(f"   📧 Email: {mech['email']}")
+                print(f"   📞 Phone: {mech['phone']}")
+                print(f"   🎯 Specialization: {mech['specialization']}")
+                print(f"   🏢 Service Center: {mech['service_center']}")
+                print(f"   📍 Location: {mech['location']}")
+                print(f"   ⭐ Rating: {mech['rating']}/5.0")
+                print(f"   💰 Consultation Fee: ₹{mech['consultation_fee']}")
+                print(f"   🟢 Status: {mech['online_status']}")
+                print("-"*60)
+        else:
+            print(f"❌ Error fetching mechanics: {r.text}")
+    except Exception as e:
+        print(f"❌ Connection error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def view_car_services_cli():
+    """View available car services"""
+    print("\n📋 CAR SERVICES")
+    print("="*40)
+    
+    try:
+        r = requests.get(f"{API}/car/services")
+        if r.status_code == 200:
+            data = r.json()
+            services = data.get('services', [])
+            
+            if not services:
+                print("❌ No services available.")
+                return
+            
+            # Group by category
+            categories = {}
+            for service in services:
+                cat = service['category']
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append(service)
+            
+            for category, cat_services in categories.items():
+                print(f"\n📂 {category.upper()}")
+                print("-"*40)
+                
+                for service in cat_services[:5]:  # Show first 5 per category
+                    print(f"🔧 {service['name']}")
+                    print(f"   📝 {service['description']}")
+                    print(f"   ⏱️  Duration: {service['estimated_duration']}")
+                    print(f"   💰 Price: ₹{service['base_price']}")
+                    print("-"*40)
+                
+                if len(cat_services) > 5:
+                    print(f"... and {len(cat_services) - 5} more services in this category")
+        else:
+            print(f"❌ Error fetching services: {r.text}")
+    except Exception as e:
+        print(f"❌ Connection error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def book_car_service_cli():
+    """Book a car service appointment"""
+    print("\n📅 BOOK CAR SERVICE")
+    print("="*40)
+    
+    # Get mechanics first
+    try:
+        r = requests.get(f"{API}/car/mechanics")
+        if r.status_code != 200:
+            print("❌ Failed to fetch mechanics")
+            return
+        
+        mechanics = r.json().get('mechanics', [])
+        if not mechanics:
+            print("❌ No mechanics available")
+            return
+        
+        print("🔧 Available Mechanics:")
+        for i, mech in enumerate(mechanics, 1):
+            print(f"{i}. {mech['name']} - {mech['specialization']} (₹{mech['consultation_fee']})")
+        
+        mech_choice = input("\nSelect mechanic (number): ").strip()
+        try:
+            mech_idx = int(mech_choice) - 1
+            if mech_idx < 0 or mech_idx >= len(mechanics):
+                print("❌ Invalid selection")
+                return
+            selected_mechanic = mechanics[mech_idx]
+        except ValueError:
+            print("❌ Invalid input")
+            return
+        
+        # Get booking details
+        car_model = input("Car model: ").strip()
+        car_issue = input("Car issue: ").strip()
+        booking_date = input("Booking date (YYYY-MM-DD): ").strip()
+        time_slot = input("Time slot: ").strip()
+        
+        # Get services
+        r = requests.get(f"{API}/car/services")
+        if r.status_code == 200:
+            services = r.json().get('services', [])
+            print("\n📋 Available Services:")
+            for i, service in enumerate(services[:10], 1):  # Show first 10
+                print(f"{i}. {service['name']} - ₹{service['base_price']}")
+            
+            service_choice = input("\nSelect service (number): ").strip()
+            try:
+                service_idx = int(service_choice) - 1
+                if service_idx < 0 or service_idx >= len(services):
+                    print("❌ Invalid service selection")
+                    return
+                selected_service = services[service_idx]
+            except ValueError:
+                print("❌ Invalid input")
+                return
+            
+            # Book appointment
+            booking_data = {
+                "user_id": USER_ID or 1,
+                "mechanic_id": selected_mechanic['id'],
+                "user_name": "CLI User",
+                "user_email": "cli@example.com",
+                "user_phone": "9876543210",
+                "car_model": car_model,
+                "car_issue": car_issue,
+                "service_type": selected_service['name'],
+                "booking_date": booking_date,
+                "time_slot": time_slot
+            }
+            
+            r = requests.post(f"{API}/car/book", json=booking_data)
+            if r.status_code == 201:
+                data = r.json()
+                print(f"✅ Appointment booked successfully!")
+                print(f"📋 Appointment ID: {data['appointment_id']}")
+                print(f"🔧 Mechanic: {selected_mechanic['name']}")
+                print(f"📅 Date: {booking_date} at {time_slot}")
+            else:
+                print(f"❌ Booking failed: {r.text}")
+        else:
+            print("❌ Failed to fetch services")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def roadside_assistance_cli():
+    """Request roadside assistance"""
+    print("\n🚨 ROADSIDE ASSISTANCE")
+    print("="*40)
+    
+    try:
+        issue = input("Describe your issue: ").strip()
+        address = input("Your location/address: ").strip()
+        
+        # Default coordinates (Mumbai)
+        latitude = 19.2183
+        longitude = 72.9781
+        
+        urgency = input("Urgency (0=Normal, 1=Urgent, 2=Emergency): ").strip()
+        try:
+            urgency = int(urgency)
+            if urgency not in [0, 1, 2]:
+                urgency = 0
+        except ValueError:
+            urgency = 0
+        
+        job_data = {
+            "user_id": USER_ID or 1,
+            "issue": issue,
+            "latitude": latitude,
+            "longitude": longitude,
+            "address": address,
+            "urgency": urgency
+        }
+        
+        r = requests.post(f"{API}/dispatch/job", json=job_data)
+        if r.status_code == 201:
+            data = r.json()
+            print(f"✅ Roadside assistance request created!")
+            print(f"📋 Job ID: {data['job_id']}")
+            print(f"🔧 Mechanics notified: {data['mechanics_offered']}")
+            print(f"📍 Estimated arrival: {data.get('estimated_arrival', 'Calculating...')}")
+            
+            if data.get('message'):
+                print(f"ℹ️  {data['message']}")
+        else:
+            print(f"❌ Request failed: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def view_my_bookings_cli():
+    """View user's car service bookings"""
+    print("\n📊 MY CAR SERVICE BOOKINGS")
+    print("="*40)
+    
+    # This would need user authentication to get specific bookings
+    print("📋 Feature requires user login")
+    print("💡 Please login to view your bookings")
+    
+    input("\nPress Enter to continue...")
+
+
+def car_mechanic_signup_cli():
+    """Car mechanic signup"""
+    print("\n🔧 MECHANIC SIGNUP")
+    print("="*40)
+    
+    try:
+        name = input("Full name: ").strip()
+        email = input("Email: ").strip()
+        phone = input("Phone: ").strip()
+        specialization = input("Specialization: ").strip()
+        experience = input("Experience (years): ").strip()
+        service_center = input("Service center: ").strip()
+        location = input("Location: ").strip()
+        consultation_fee = input("Consultation fee (₹): ").strip() or "400"
+        
+        try:
+            experience = int(experience)
+            consultation_fee = int(consultation_fee)
+        except ValueError:
+            print("❌ Invalid numbers")
+            return
+        
+        signup_data = {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "specialization": specialization,
+            "experience": experience,
+            "service_center": service_center,
+            "location": location,
+            "consultation_fee": consultation_fee
+        }
+        
+        r = requests.post(f"{API}/car/mechanic/signup", json=signup_data)
+        if r.status_code == 201:
+            data = r.json()
+            print(f"✅ Mechanic registration successful!")
+            print(f"📋 Mechanic ID: {data['mechanic_id']}")
+            print(f"ℹ️  {data['message']}")
+        else:
+            print(f"❌ Registration failed: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def car_mechanic_login_cli():
+    """Car mechanic login"""
+    print("\n🔧 MECHANIC LOGIN")
+    print("="*40)
+    
+    try:
+        email = input("Email: ").strip()
+        password = input("Password: ").strip()
+        
+        login_data = {"email": email, "password": password}
+        
+        r = requests.post(f"{API}/car/mechanic/login", json=login_data)
+        if r.status_code == 200:
+            data = r.json()
+            print(f"✅ Login successful!")
+            print(f"👋 Welcome, {data['mechanic']['name']}!")
+            
+            # Show mechanic dashboard
+            mechanic_dashboard_cli(data['mechanic']['id'], data['token'])
+        else:
+            print(f"❌ Login failed: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def mechanic_dashboard_cli(mechanic_id, token):
+    """Mechanic dashboard after login"""
+    print(f"\n🔧 MECHANIC DASHBOARD")
+    print("="*40)
+    
+    while True:
+        print("\n--- MECHANIC DASHBOARD ---")
+        print("1. 📋 View Appointments")
+        print("2. 🚨 View Dispatch Jobs")
+        print("3. 💰 View Wallet")
+        print("4. 📍 Update Location")
+        print("5. ⬅️ Logout")
+        
+        choice = input("Choice: ").strip()
+        
+        if choice == "1":
+            view_mechanic_appointments_cli(mechanic_id, token)
+        elif choice == "2":
+            view_mechanic_jobs_cli(mechanic_id)
+        elif choice == "3":
+            view_mechanic_wallet_cli(mechanic_id)
+        elif choice == "4":
+            update_mechanic_location_cli(mechanic_id)
+        elif choice == "5":
+            break
+        else:
+            print("❌ Invalid choice")
+
+
+def view_mechanic_appointments_cli(mechanic_id, token):
+    """View mechanic's appointments"""
+    print("\n📋 MY APPOINTMENTS")
+    print("="*40)
+    
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        r = requests.get(f"{API}/car/mechanic/appointments", headers=headers)
+        
+        if r.status_code == 200:
+            data = r.json()
+            appointments = data.get('appointments', [])
+            
+            if not appointments:
+                print("📋 No appointments found.")
+                return
+            
+            for apt in appointments:
+                print(f"📅 Appointment #{apt['id']}")
+                print(f"👤 Customer: {apt['user_name']}")
+                print(f"📞 Phone: {apt['user_phone']}")
+                print(f"🚗 Car: {apt['car_model']}")
+                print(f"🔧 Issue: {apt['car_issue']}")
+                print(f"📋 Service: {apt['service_type']}")
+                print(f"📅 Date: {apt['booking_date']} at {apt['time_slot']}")
+                print(f"💰 Amount: ₹{apt['payment_amount']}")
+                print(f"📊 Status: {apt['status']}")
+                print("-"*40)
+        else:
+            print(f"❌ Failed to fetch appointments: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def view_mechanic_jobs_cli(mechanic_id):
+    """View mechanic's dispatch jobs"""
+    print("\n🚨 DISPATCH JOBS")
+    print("="*40)
+    
+    try:
+        r = requests.get(f"{API}/dispatch/mechanic/{mechanic_id}/jobs")
+        
+        if r.status_code == 200:
+            data = r.json()
+            jobs = data.get('jobs', [])
+            
+            if not jobs:
+                print("📋 No dispatch jobs found.")
+                return
+            
+            for job in jobs:
+                print(f"📋 Job #{job['id']}")
+                print(f"🚨 Issue: {job['issue']}")
+                print(f"📍 Address: {job['address']}")
+                print(f"📊 Status: {job['status']}")
+                print(f"💰 Earnings: ₹{job['mechanic_earnings']}")
+                print(f"📅 Created: {job['created_at']}")
+                print("-"*40)
+        else:
+            print(f"❌ Failed to fetch jobs: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def view_mechanic_wallet_cli(mechanic_id):
+    """View mechanic wallet"""
+    print("\n💰 MECHANIC WALLET")
+    print("="*40)
+    
+    try:
+        r = requests.get(f"{API}/dispatch/mechanic/{mechanic_id}/wallet")
+        
+        if r.status_code == 200:
+            wallet = r.json()
+            print(f"💰 Current Balance: ₹{wallet['current_balance']}")
+            print(f"💵 Total Earned: ₹{wallet['total_earned']}")
+            print(f"💸 Total Withdrawn: ₹{wallet['total_withdrawn']}")
+            print(f"📅 Last Updated: {wallet['last_updated']}")
+        else:
+            print(f"❌ Failed to fetch wallet: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
+
+
+def update_mechanic_location_cli(mechanic_id):
+    """Update mechanic location"""
+    print("\n📍 UPDATE LOCATION")
+    print("="*40)
+    
+    try:
+        latitude = input("Latitude (e.g., 19.2183): ").strip()
+        longitude = input("Longitude (e.g., 72.9781): ").strip()
+        address = input("Address: ").strip()
+        
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+        except ValueError:
+            print("❌ Invalid coordinates")
+            return
+        
+        location_data = {
+            "latitude": lat,
+            "longitude": lon,
+            "address": address
+        }
+        
+        r = requests.put(f"{API}/dispatch/mechanic/{mechanic_id}/location", json=location_data)
+        
+        if r.status_code == 200:
+            data = r.json()
+            print(f"✅ {data['message']}")
+        else:
+            print(f"❌ Failed to update location: {r.text}")
+            
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    
+    input("\nPress Enter to continue...")
 
 
 if __name__ == "__main__":
